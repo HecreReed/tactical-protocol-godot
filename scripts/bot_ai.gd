@@ -38,6 +38,7 @@ var wd_best := 1e9
 var wd_at := 0.0
 var wd_kick := 0
 var used_util := false
+var next_ability_at := 0.0
 # 状态
 var flash_until := 0.0
 var daze_until := 0.0
@@ -260,25 +261,34 @@ func _think(now: float) -> void:
 	_util_abilities(now)
 
 func _combat_abilities(now: float) -> void:
-	# 交战中大招：残血涅槃 / 锋刃 / 火箭
-	if hp < 35 and ult_points >= Ab.AGENTS[agent_id]["ult_cost"]:
-		var xt: String = Ab.AGENTS[agent_id]["x"]["type"]
-		if xt in ["phoenix_ult", "knife_ult", "null_pulse", "big_stun"]:
-			Ab.cast_for_bot(main, self, "x")
+	_try_intent_ability(now, true)
 
 func _util_abilities(now: float) -> void:
-	if used_util or not main.can_fight():
+	if not main.can_fight():
 		return
 	var side: String = main.match_mgr.side_of(self)
-	# 进攻执行：烟/闪开路；防守就位：装置布防
 	if side == "atk" and state == "execute":
-		used_util = true
-		Ab.cast_for_bot(main, self, "e")
-		Ab.cast_for_bot(main, self, "q")
+		_try_intent_ability(now, false)
 	elif side == "def" and state == "post" and nav_finished():
-		used_util = true
-		Ab.cast_for_bot(main, self, "e")
-		Ab.cast_for_bot(main, self, "c")
+		_try_intent_ability(now, false)
+
+func _try_intent_ability(now: float, in_combat: bool) -> bool:
+	if now < next_ability_at or now < suppressed_until:
+		return false
+	var context := {
+		"side": main.match_mgr.side_of(self),
+		"state": state,
+		"in_combat": in_combat,
+		"low_hp": hp < 45.0,
+	}
+	for key in Ab.bot_ability_order(agent_id, context):
+		if key == "x" and ult_points < Ab.AGENTS[agent_id]["ult_cost"]:
+			continue
+		if Ab.cast_for_bot(main, self, key, now):
+			used_util = true
+			next_ability_at = now + randf_range(2.5, 5.0)
+			return true
+	return false
 
 func _navigate(dt: float, now: float) -> void:
 	if channel != "":
@@ -512,6 +522,7 @@ func revive_reset(pos: Vector3) -> void:
 	target = null
 	channel = ""
 	used_util = false
+	next_ability_at = 0.0
 	hunt_until = 0.0
 	next_regroup = 0.0
 	fell_back = false

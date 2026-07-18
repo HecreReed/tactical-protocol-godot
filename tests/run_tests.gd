@@ -15,6 +15,7 @@ func _init() -> void:
 	_test_agent_mechanics()
 	_test_cast_contracts()
 	_test_combat_and_round_integration()
+	_test_bot_intents()
 	if failures == 0:
 		print("PASS: %d checks" % checks)
 	else:
@@ -429,6 +430,32 @@ func _test_combat_and_round_integration() -> void:
 	assert_eq(utility_store["items"], [], "round cleanup clears runtime utility")
 	assert_eq(utility_store["next_id"], 1, "round cleanup resets stable id sequence")
 	assert_eq(control_state["control_mode"], null, "round cleanup ends controlled unit mode")
+
+func _test_bot_intents() -> void:
+	var intents := {}
+	for definition in Catalog.all_abilities():
+		var intent := String(definition["intent"])
+		intents[intent] = true
+		assert_true(Abilities.supports_intent(intent), "supported Bot intent: %s" % intent)
+	assert_eq(intents.size(), 10, "upstream exposes ten ability intents")
+	assert_eq(Abilities.supported_intents().size(), 10, "Bot supports exactly upstream intents")
+
+	for agent_id in Catalog.agent_ids():
+		var order := Abilities.bot_ability_order(agent_id, {
+			"side": "atk", "state": "execute", "in_combat": true, "low_hp": false,
+		})
+		assert_eq(order.size(), 4, "%s Bot sees all slots" % agent_id)
+		var unique_order := {}
+		for ordered_key in order:
+			unique_order[ordered_key] = true
+		assert_eq(unique_order.size(), 4, "%s Bot slot order is unique" % agent_id)
+		for key in ["c", "q", "e", "x"]:
+			assert_true(key in order, "%s Bot can consider %s" % [agent_id, key])
+
+	var sage_order := Abilities.bot_ability_order("sage", {
+		"side": "def", "state": "post", "in_combat": true, "low_hp": true,
+	})
+	assert_eq(sage_order[0], "e", "low-health Sage prioritizes heal")
 
 func _actor(agent_id: String) -> Dictionary:
 	return {

@@ -6,6 +6,9 @@ const Runtime := preload("res://scripts/ability_runtime.gd")
 const Mechanics := preload("res://scripts/agent_mechanics.gd")
 const Weapons := preload("res://scripts/weapons.gd")
 const SLOT_KEYS := ["c", "q", "e", "x"]
+const SUPPORTED_INTENTS := [
+	"entry", "cover", "control", "damage", "escape", "heal", "info", "setup", "weapon", "ultimate",
+]
 
 # Every upstream runtime type is registered explicitly. Values name the world adapter family.
 const HANDLERS := {
@@ -53,6 +56,39 @@ static func handler_types() -> Array[String]:
 	for type in HANDLERS:
 		result.append(String(type))
 	result.sort()
+	return result
+
+static func supports_intent(intent: String) -> bool:
+	return intent in SUPPORTED_INTENTS
+
+static func supported_intents() -> Array[String]:
+	var result: Array[String] = []
+	result.assign(SUPPORTED_INTENTS)
+	return result
+
+static func bot_ability_order(agent_id: String, context: Dictionary) -> Array[String]:
+	if not Catalog.has_agent(agent_id):
+		return []
+	var preference: Array[String]
+	if bool(context.get("low_hp", false)):
+		preference = ["heal", "escape", "control", "cover", "damage", "entry", "info", "setup", "weapon", "ultimate"]
+	elif bool(context.get("in_combat", false)):
+		preference = ["damage", "control", "escape", "heal", "entry", "weapon", "info", "cover", "setup", "ultimate"]
+	elif String(context.get("side", "atk")) == "atk" and String(context.get("state", "")) == "execute":
+		preference = ["cover", "info", "entry", "control", "damage", "setup", "heal", "escape", "weapon", "ultimate"]
+	else:
+		preference = ["setup", "info", "cover", "control", "damage", "entry", "heal", "escape", "weapon", "ultimate"]
+	var result: Array[String] = []
+	result.assign(SLOT_KEYS)
+	result.sort_custom(func(a, b):
+		var intent_a := String(Catalog.ability(agent_id, a).get("intent", "entry"))
+		var intent_b := String(Catalog.ability(agent_id, b).get("intent", "entry"))
+		var priority_a := preference.find(intent_a)
+		var priority_b := preference.find(intent_b)
+		if priority_a == priority_b:
+			return SLOT_KEYS.find(a) < SLOT_KEYS.find(b)
+		return priority_a < priority_b
+	)
 	return result
 
 static func requires_equip(type: String) -> bool:
