@@ -6,6 +6,7 @@ const PlayerScript := preload("res://scripts/player.gd")
 const BotScript := preload("res://scripts/bot_ai.gd")
 const MatchScript := preload("res://scripts/match_mgr.gd")
 const HudScript := preload("res://scripts/hud.gd")
+const SfxScript := preload("res://scripts/sfx.gd")
 const Weapons := preload("res://scripts/weapons.gd")
 const Ab := preload("res://scripts/abilities.gd")
 
@@ -24,6 +25,8 @@ var devices: Array = []     # {kind,pos,owner,team,node,until,arm_at,hp,next_fir
 var drops: Array = []       # {body, weapon}
 var sel_map_id := ""
 var observer := false
+var sfx: Node
+var _fx_live := 0
 
 func now() -> float:
 	return _t
@@ -309,6 +312,8 @@ func _start_game(map_id: String, agent_id: String, obs: bool = false) -> void:
 	add_child(map)
 	map.build(md, float(data["world"]))
 
+	sfx = SfxScript.new()
+	add_child(sfx)
 	hud = HudScript.new()
 	add_child(hud)
 
@@ -383,6 +388,8 @@ func hitscan(shooter: Node, origin: Vector3, dir: Vector3, def: Dictionary) -> v
 		if origin.distance_to(hit["position"]) > float(def["range"]):
 			dmg *= 0.75
 		spawn_particles(hit["position"], Color(0.8, 0.15, 0.15), 10, 3.0, 0.35)
+		if shooter == player:
+			sfx.play("headshot" if part == "h" else "hit")
 		col.take_damage(dmg, shooter, part == "h")
 	else:
 		spawn_particles(hit["position"], Color(0.9, 0.85, 0.6), 6, 2.5, 0.25)
@@ -496,6 +503,7 @@ func spawn_smoke(pos: Vector3, r: float, dur: float) -> void:
 	add_child(body)
 	body.global_position = mi.global_position
 	spawn_particles(mi.global_position, Color(0.9, 0.92, 0.95), 24, 4.0, 0.8)
+	sfx.play("smoke_pop", player.global_position.distance_to(pos))
 	smokes.append({ "pos": mi.global_position, "r": r, "until": now() + dur, "mesh": mi, "body": body })
 
 func in_smoke(pos: Vector3) -> bool:
@@ -527,6 +535,7 @@ func spawn_zone(owner: Node, pos: Vector3, r: float, dur: float, dps: float) -> 
 
 func explode(owner: Node, pos: Vector3, r: float, dmg_near: float, dmg_far: float) -> void:
 	explosion_fx(pos, r, Color(1.0, 0.6, 0.25))
+	sfx.play("explosion", player.global_position.distance_to(pos) * 0.4)
 	for ent in combatants():
 		if not ent.alive:
 			continue
@@ -545,6 +554,7 @@ func explode(owner: Node, pos: Vector3, r: float, dmg_near: float, dmg_far: floa
 
 func flash_burst(pos: Vector3, shooter: Node) -> void:
 	explosion_fx(pos, 1.2, Color(1.0, 0.95, 0.7))
+	sfx.play("flash_pop", player.global_position.distance_to(pos))
 	for ent in combatants():
 		if not ent.alive or ent == shooter:
 			continue
@@ -891,6 +901,9 @@ func spawn_ragdoll(ent: Node, from_dir: Vector3) -> void:
 
 # ---------------- 粒子 / 特效 ----------------
 func spawn_particles(pos: Vector3, color: Color, amount: int, speed: float, life: float) -> void:
+	if _fx_live > 36:
+		return
+	_fx_live += 1
 	var p := GPUParticles3D.new()
 	p.amount = amount
 	p.one_shot = true
@@ -921,7 +934,9 @@ func spawn_particles(pos: Vector3, color: Color, amount: int, speed: float, life
 	add_child(p)
 	p.global_position = pos
 	p.emitting = true
-	get_tree().create_timer(life + 0.4).timeout.connect(func(): if is_instance_valid(p): p.queue_free())
+	get_tree().create_timer(life + 0.4).timeout.connect(func():
+		_fx_live -= 1
+		if is_instance_valid(p): p.queue_free())
 
 func explosion_fx(pos: Vector3, r: float, color: Color) -> void:
 	spawn_particles(pos, color, 36, r * 4.0, 0.6)

@@ -124,9 +124,13 @@ scoreboard={
 ]
 }
 
+[physics]
+
+common/physics_ticks_per_second=90
+
 [rendering]
 
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 lights_and_shadows/directional_shadow/size=2048
-anti_aliasing/quality/msaa_3d=2
+anti_aliasing/quality/msaa_3d=1

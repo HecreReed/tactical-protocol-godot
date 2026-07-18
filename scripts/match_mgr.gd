@@ -24,6 +24,7 @@ var plan_site := "A"
 var execute_called := false
 var live_start := 0.0
 var loss_streak := { "ally": 0, "enemy": 0 }
+var _next_beep := 0.0
 
 func setup(m: Node3D) -> void:
 	main = m
@@ -99,6 +100,7 @@ func _process(_dt: float) -> void:
 				t_phase = n + ROUND_TIME
 				main.map.remove_barriers()
 				main.hud.banner("行动开始")
+				main.sfx.play("round_start")
 		"live":
 			if n >= t_phase:
 				end_round("def", "时间耗尽")
@@ -106,6 +108,10 @@ func _process(_dt: float) -> void:
 				execute_called = true
 			_check_elim()
 		"planted":
+			if n >= _next_beep:
+				var remain := explode_at - n
+				main.sfx.play("beep_fast" if remain < 12.0 else "beep", main.player.global_position.distance_to(spike_pos) * 0.5)
+				_next_beep = n + (0.4 if remain < 12.0 else 1.0)
 			if n >= explode_at:
 				main.explosion_at(spike_pos)
 				end_round("atk", "炸弹引爆")
@@ -159,6 +165,7 @@ func end_round(winner_side: String, reason: String) -> void:
 	var loser := "enemy" if winner_team == "ally" else "ally"
 	loss_streak[loser] += 1
 	main.hud.banner("%s 获胜 — %s" % ["我方" if winner_team == "ally" else "敌方", reason])
+	main.sfx.play("round_win" if winner_team == "ally" else "round_lose")
 
 func side_of_team(t: String) -> String:
 	return ally_side if t == "ally" else ("def" if ally_side == "atk" else "atk")
@@ -180,6 +187,8 @@ func on_death(ent: Node, killer: Node) -> void:
 		var kn: String = killer.agent_name if "agent_name" in killer else "你"
 		var vn: String = ent.agent_name if "agent_name" in ent else "你"
 		main.hud.kill_msg("%s ✖ %s" % [kn, vn])
+		if killer == main.player:
+			main.sfx.play("kill")
 	if ent == spike_carrier:
 		spike_carrier = null
 		spike_state = "dropped"
@@ -207,6 +216,7 @@ func plant_tick(ent: Node, dt: float) -> void:
 		t_phase = explode_at
 		main.spawn_spike_mesh(spike_pos)
 		main.hud.banner("SPIKE 已安放 — 45 秒")
+		main.sfx.play("planted")
 
 func defuse_tick(ent: Node, dt: float) -> void:
 	if phase != "planted":
@@ -218,6 +228,7 @@ func defuse_tick(ent: Node, dt: float) -> void:
 	defuse_prog += dt
 	if defuse_prog >= DEFUSE_TIME:
 		ent.channel = ""
+		main.sfx.play("defused")
 		end_round("def", "拆除成功")
 
 func player_interact(p: Node, dt: float) -> void:

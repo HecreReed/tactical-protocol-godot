@@ -4,6 +4,7 @@ extends CanvasLayer
 
 const Weapons := preload("res://scripts/weapons.gd")
 const Ab := preload("res://scripts/abilities.gd")
+const Icons := preload("res://scripts/icons.gd")
 
 const C_RED := Color8(0xff, 0x46, 0x55)
 const C_TEAL := Color8(0x39, 0xd0, 0xc9)
@@ -53,6 +54,9 @@ var report_panel: PanelContainer
 var report_l: Label
 var buy_panel: Control
 var player_panels: Array = []
+var pause_panel: PanelContainer
+var pause_open := false
+var lock_hint: Control
 var buy_money_l: Label
 var buy_grid_holder: VBoxContainer
 
@@ -310,6 +314,8 @@ func setup(m: Node3D) -> void:
 	board_body.custom_minimum_size = Vector2(640, 0)
 
 	_build_buy()
+	_build_pause()
+	_build_lock_hint()
 
 func _mk_dot(col: Color) -> ColorRect:
 	var d := ColorRect.new()
@@ -501,7 +507,95 @@ func on_round_start() -> void:
 	if buy_open:
 		_refresh_buy()
 
-# ---------------- 反馈 ----------------
+# ---------------- 暂停 / 设置（复刻网页版设置面板） ----------------
+func _build_pause() -> void:
+	pause_panel = PanelContainer.new()
+	pause_panel.set_anchors_preset(Control.PRESET_CENTER)
+	pause_panel.position = Vector2(-260, -220)
+	pause_panel.add_theme_stylebox_override("panel", _sb(Color(0.039, 0.067, 0.094, 0.97), C_BORDER, 1))
+	pause_panel.visible = false
+	add_child(pause_panel)
+	var v := VBoxContainer.new()
+	v.custom_minimum_size = Vector2(520, 0)
+	v.add_theme_constant_override("separation", 14)
+	pause_panel.add_child(v)
+	var title := _lbl(v, 20, C_WHITE, "设 置")
+	_mk_slider(v, "灵敏度", 0.2, 3.0, 1.0, func(val): main.player.sens_mult = val)
+	_mk_slider(v, "视野 FOV", 60.0, 100.0, 71.0, func(val): main.player.fov_base = val)
+	_mk_slider(v, "音量", 0.0, 1.0, 0.8, func(val): main.sfx.volume = val)
+	var dr := HBoxContainer.new()
+	dr.add_theme_constant_override("separation", 6)
+	v.add_child(dr)
+	var dl := _lbl(dr, 13, C_DIM, "AI 难度  ")
+	for d in [["新手", 0.55], ["常规", 0.8], ["困难", 1.0], ["天梯", 1.25]]:
+		var b := Button.new()
+		b.text = d[0]
+		b.add_theme_font_size_override("font_size", 12)
+		b.add_theme_stylebox_override("normal", _sb(C_ITEM_BG, C_BORDER, 1))
+		b.add_theme_stylebox_override("hover", _sb(C_ITEM_BG, C_TEAL, 1))
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.pressed.connect(func(): main.difficulty = d[1])
+		dr.add_child(b)
+	var closeb := Button.new()
+	closeb.text = "保 存 并 关 闭"
+	closeb.add_theme_font_size_override("font_size", 14)
+	closeb.add_theme_color_override("font_color", Color8(0x06, 0x22, 0x2a))
+	closeb.add_theme_stylebox_override("normal", _sb(C_TEAL, C_TEAL, 1))
+	closeb.pressed.connect(func(): toggle_pause())
+	v.add_child(closeb)
+
+func _mk_slider(parent: Node, name_txt: String, mn: float, mx: float, val: float, on_change: Callable) -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 14)
+	parent.add_child(row)
+	var l := _lbl(row, 13, C_DIM, name_txt)
+	l.custom_minimum_size = Vector2(90, 0)
+	var sl := HSlider.new()
+	sl.min_value = mn
+	sl.max_value = mx
+	sl.step = 0.05 if mx <= 3.0 else 1.0
+	sl.value = val
+	sl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sl.custom_minimum_size = Vector2(0, 24)
+	row.add_child(sl)
+	var vl := _lbl(row, 13, C_GOLD, str(val))
+	vl.custom_minimum_size = Vector2(52, 0)
+	vl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	sl.value_changed.connect(func(nv):
+		vl.text = ("%.2f" % nv) if mx <= 3.0 else str(int(nv))
+		on_change.call(nv))
+
+func toggle_pause() -> void:
+	if buy_open:
+		toggle_buy()
+		return
+	pause_open = not pause_open
+	pause_panel.visible = pause_open
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if pause_open else Input.MOUSE_MODE_CAPTURED
+	if not pause_open:
+		lock_hint.visible = false
+
+# ---------------- 点击回场（web 指针锁丢失兜底） ----------------
+func _build_lock_hint() -> void:
+	lock_hint = Control.new()
+	lock_hint.set_anchors_preset(Control.PRESET_FULL_RECT)
+	lock_hint.visible = false
+	add_child(lock_hint)
+	var dim := ColorRect.new()
+	dim.color = Color(0.02, 0.04, 0.06, 0.55)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	lock_hint.add_child(dim)
+	var btn := Button.new()
+	btn.text = "点 击 进 入 战 场"
+	btn.add_theme_font_size_override("font_size", 20)
+	btn.add_theme_stylebox_override("normal", _sb(C_PANEL, C_TEAL, 1))
+	btn.add_theme_stylebox_override("hover", _sb(Color8(0x18, 0x28, 0x35), C_TEAL, 1))
+	btn.set_anchors_preset(Control.PRESET_CENTER)
+	btn.position = Vector2(-140, -30)
+	btn.pressed.connect(func():
+		lock_hint.visible = false
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED)
+	lock_hint.add_child(btn)
 func _draw_crosshair(c: Control) -> void:
 	if main != null and main.player != null and not main.player.alive:
 		return
@@ -591,25 +685,43 @@ func _refresh_abilities(p) -> void:
 		c.queue_free()
 	for k in ["c", "q", "e"]:
 		var sl: Dictionary = p.ability_slots[k]
-		ability_box.add_child(_ab_square(k.to_upper(), sl["def"]["name"], str(sl["n"]), sl["n"] <= 0, false))
+		ability_box.add_child(_ab_square(k.to_upper(), sl["def"]["type"], str(sl["n"]), sl["n"] <= 0, false))
 	var ult_ready: bool = p.ult_points >= a["ult_cost"]
-	ability_box.add_child(_ab_square("X", a["x"]["name"], "%d/%d" % [p.ult_points, a["ult_cost"]], false, true, ult_ready))
+	ability_box.add_child(_ab_square("X", a["x"]["type"], "%d/%d" % [p.ult_points, a["ult_cost"]], false, true, ult_ready))
 
-func _ab_square(key: String, nm: String, n: String, empty: bool, is_ult: bool, ready: bool = false) -> PanelContainer:
+func _ab_square(key: String, ab_type: String, n: String, empty: bool, is_ult: bool, ready: bool = false) -> PanelContainer:
 	var sq := PanelContainer.new()
 	var border := C_GOLD if is_ult else (C_TEAL if ready else Color8(0x2b, 0x3b, 0x47))
 	sq.add_theme_stylebox_override("panel", _sb(C_PANEL, border, 1))
 	sq.custom_minimum_size = Vector2(58, 58)
 	if empty:
 		sq.modulate.a = 0.35
-	var v := VBoxContainer.new()
-	sq.add_child(v)
-	var kl := _lbl(v, 10, C_DIM, key)
-	var nl := _lbl(v, 11, C_GOLD if is_ult else C_WHITE, nm)
-	nl.clip_text = true
-	nl.custom_minimum_size = Vector2(54, 0)
-	var cnt := _lbl(v, 12, C_GOLD, n)
+	var overlay := Control.new()
+	sq.add_child(overlay)
+	var icon := TextureRect.new()
+	icon.texture = Icons.tex(ab_type, C_GOLD if is_ult else (C_TEAL if ready else C_WHITE), 54)
+	icon.custom_minimum_size = Vector2(27, 27)
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.set_anchors_preset(Control.PRESET_CENTER)
+	icon.position = Vector2(-14, -14)
+	icon.size = Vector2(28, 28)
+	overlay.add_child(icon)
+	var kl := Label.new()
+	kl.text = key
+	kl.add_theme_font_size_override("font_size", 10)
+	kl.add_theme_color_override("font_color", C_DIM)
+	kl.position = Vector2(3, 1)
+	overlay.add_child(kl)
+	var cnt := Label.new()
+	cnt.text = n
+	cnt.add_theme_font_size_override("font_size", 12)
+	cnt.add_theme_color_override("font_color", C_GOLD)
+	cnt.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	cnt.position = Vector2(-30, -18)
+	cnt.custom_minimum_size = Vector2(26, 0)
 	cnt.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	overlay.add_child(cnt)
 	return sq
 
 # ---------------- 每帧 ----------------
@@ -677,6 +789,11 @@ func _process(dt: float) -> void:
 		spec_l.text = "阵亡 — 等待回合结束"
 	else:
 		spec_l.text = ""
+	# 指针锁丢失兜底：无菜单打开但鼠标未捕获 → 显示"点击进入战场"
+	if not pause_open and not buy_open and main.match_mgr.phase != "over" and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+		lock_hint.visible = true
+	elif Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		lock_hint.visible = false
 	# 横幅 / 遮罩
 	banner_big.visible = main.now() < banner_until
 	vignette.color.a = move_toward(vignette.color.a, 0, dt * 1.4)

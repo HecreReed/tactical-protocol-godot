@@ -49,6 +49,13 @@ var last_seen := Vector3.ZERO
 var hunt_until := 0.0
 var next_regroup := 0.0
 var rig: Node3D
+var react_at := 0.0
+var burst_left := 0
+var burst_pause := 0.0
+var strafe_t := 0.0
+var strafe_dir := 1.0
+var last_shot_at := -9.0
+var crouching := false
 
 func setup(m: Node3D, t: String, aid: String) -> void:
 	main = m
@@ -109,7 +116,7 @@ func _physics_process(dt: float) -> void:
 	move_and_slide()
 	rotation.y = yaw
 	if rig != null:
-		rig.animate(Vector2(velocity.x, velocity.z).length(), false, now)
+		rig.animate(Vector2(velocity.x, velocity.z).length(), crouching, now)
 
 func _think(now: float) -> void:
 	if now < flash_until:
@@ -135,6 +142,11 @@ func _think(now: float) -> void:
 				set_goal(last_seen)
 		target = best
 		acq = 0.0
+		if target != null:
+			# 反应时间：难度越高反应越快
+			react_at = now + clampf(0.42 - 0.22 * main.difficulty, 0.08, 0.42) + randf() * 0.1
+			burst_left = 0
+			burst_pause = 0.0
 	if target != null:
 		hunt_until = 0.0
 		_combat_abilities(now)
@@ -142,6 +154,12 @@ func _think(now: float) -> void:
 	# 追击超时 → 回归任务
 	if state == "hunt" and (now > hunt_until or nav_finished()):
 		state = "wait"
+	# 空闲战术换弹（像人：脱战 1.6s 且弹匣<55% 就补弹）
+	if weapon["ammo"] < int(weapon["def"]["mag"] * 0.55) and weapon["reserve"] > 0 and now - last_shot_at > 1.6 and now >= next_fire:
+		var take: int = mini(weapon["def"]["mag"] - weapon["ammo"], weapon["reserve"])
+		weapon["reserve"] -= take
+		weapon["ammo"] += take
+		next_fire = now + weapon["def"]["rl"]
 	# 弹尽：捡枪或拼刀
 	if weapon["ammo"] <= 0 and weapon["reserve"] <= 0:
 		var d: Dictionary = main.nearest_drop(global_position, 45.0)
@@ -228,39 +246,77 @@ func _combat(dt: float, now: float) -> void:
 	acq += dt
 	var to := target.global_position - global_position
 	var d := Vector2(to.x, to.z).length()
-	yaw = lerp_angle(yaw, atan2(-to.x, -to.z), dt * 10.0)
-	# 弹尽拼刀：直冲
+	# 弹尽拼刀：直冲蛇皮走位
 	var dry: bool = weapon["ammo"] <= 0 and weapon["reserve"] <= 0
-	var strafe := sin(now * 3.0 + get_instance_id() % 7) * 0.5
+	strafe_t -= dt
+	if strafe_t <= 0:
+		strafe_t = randf_range(0.35, 0.7)
+		strafe_dir = -1.0 if randf() < 0.5 else 1.0
 	var right := Vector3(cos(yaw), 0, -sin(yaw))
-	var adv := 0.0
-	if dry: adv = 1.0
-	elif d > 30: adv = 0.7
-	elif d < 8: adv = -0.5
 	var fwd := Vector3(-sin(yaw), 0, -cos(yaw))
-	var spd := SPEED * (0.8 if not dry else 1.05)
-	velocity.x = (fwd.x * adv + right.x * strafe) * spd
-	velocity.z = (fwd.z * adv + right.z * strafe) * spd
-	if not main.can_fight():
-		return
+	# 瞄准（带移动预判）：目标位置 + 速度提前量
+	var lead_k: float = d * 0.022 * (0.3 + 0.7 * main.difficulty)
+	var aim_p: Vector3 = target.global_position + Vector3(
+		clampf(target.velocity.x * lead_k, -1.4, 1.4), 1.2,
+		clampf(target.velocity.z * lead_k, -1.4, 1.4))
+	var aim_spd: float = (7.0 + main.difficulty * 8.0) * (0.45 if now < daze_until else 1.0)
+	yaw = lerp_angle(yaw, atan2(-(aim_p.x - global_position.x), -(aim_p.z - global_position.z)), minf(1.0, dt * aim_spd))
 	if dry:
+		var adv_dir := (target.global_position - global_position).normalized()
+		velocity.x = (adv_dir.x + right.x * strafe_dir * 0.4) * SPEED * 1.05
+		velocity.z = (adv_dir.z + right.z * strafe_dir * 0.4) * SPEED * 1.05
+		crouching = false
+		if not main.can_fight():
+			return
 		if d < 2.1 and now >= next_fire:
 			next_fire = now + 0.75
+			main.sfx.shot("melee", main.player.global_position.distance_to(global_position))
 			target.take_damage(50.0, self, false)
 		return
+	# 走位：Valorant 式"停住再打"+ 远距蹲射
+	var firing: bool = burst_left > 0 and now >= react_at
+	crouching = firing and d > 22 and main.difficulty > 0.75
+	var want_stand: bool = weapon["def"].get("scope", false) or d > 35 or (firing and d > 8)
+	if not want_stand and channel == "":
+		var spd := SPEED * 0.7
+		velocity.x = right.x * strafe_dir * spd
+		velocity.z = right.z * strafe_dir * spd
+	else:
+		velocity.x *= 0.5
+		velocity.z *= 0.5
+	if not main.can_fight():
+		return
+	if now < react_at:
+		return
 	if now >= next_fire and weapon["ammo"] > 0:
+		# 点射节奏：近距长点射，远距短点射+停顿
+		if burst_left <= 0:
+			if now < burst_pause:
+				return
+			burst_left = randi_range(3, 7) + (4 if d < 12 else 0)
+		burst_left -= 1
+		if burst_left <= 0:
+			burst_pause = now + randf_range(0.25, 0.5) + d * 0.006
 		next_fire = now + weapon["def"]["fi"] * randf_range(1.0, 1.15) * (0.85 if now < stim_until else 1.0)
 		weapon["ammo"] -= 1
-		var err: float = (0.02 + d * 0.0006) * clampf(2.0 - acq * 1.5, 0.5, 2.0) / main.difficulty
+		last_shot_at = now
+		var acq_norm := clampf(acq / (1.0 - 0.45 * minf(main.difficulty, 1.2)), 0.0, 1.0)
+		var err: float = (0.02 + d * 0.0006) * (2.3 - 1.3 * acq_norm) / main.difficulty
 		if now < daze_until: err *= 2.3
-		var aim: Vector3 = aim_dir()
+		if crouching: err *= 0.8
+		var aim: Vector3 = (aim_p - eye_pos()).normalized()
 		aim += Vector3(randfn(0, err), randfn(0, err), randfn(0, err))
+		main.sfx.shot(weapon["def"]["cat"], main.player.global_position.distance_to(global_position))
 		main.hitscan(self, eye_pos(), aim.normalized(), weapon["def"])
 	elif weapon["ammo"] <= 0 and weapon["reserve"] > 0:
 		var take: int = mini(weapon["def"]["mag"], weapon["reserve"])
 		weapon["reserve"] -= take
 		weapon["ammo"] = take
 		next_fire = now + weapon["def"]["rl"]
+		# 换弹拉开距离
+		var away := (global_position - target.global_position).normalized()
+		velocity.x = (away.x * 0.8 + right.x * strafe_dir * 0.5) * SPEED * 0.85
+		velocity.z = (away.z * 0.8 + right.z * strafe_dir * 0.5) * SPEED * 0.85
 
 func take_damage(dmg: float, killer: Node = null, _hs: bool = false) -> void:
 	if not alive:

@@ -52,6 +52,11 @@ var bob_t := 0.0
 var spectate_idx := 0
 var spectating: Node = null
 var observer := false
+var knife_w: Dictionary = {}
+var ads := false
+var sens_mult := 1.0
+var fov_base := 71.0
+var step_acc := 0.0
 
 func _ready() -> void:
 	cam = Camera3D.new()
@@ -69,6 +74,7 @@ func _ready() -> void:
 	add_child(col)
 	collision_mask = 1 | 8
 	secondary = Weapons.make("classic")
+	knife_w = { "id": "knife", "def": { "name": "战术刀", "cat": "melee", "cost": 0, "mag": -1, "res": -1, "fi": 0.55, "rl": 0.0, "dmg": {"h": 100, "b": 50, "l": 50}, "spread": 0.0, "range": 2.6 }, "ammo": -1, "reserve": -1, "reload_end": 0.0, "next_fire": 0.0 }
 	weapon = secondary
 	ability_slots = Ab.make_slots(agent_id)
 	if observer:
@@ -178,19 +184,27 @@ func _unhandled_input(event: InputEvent) -> void:
 			spectate_idx += 1
 		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		var s := SENS * (0.35 if _scoped() else 1.0)
+		var s := SENS * sens_mult * (0.35 if _scoped() else 1.0)
 		yaw -= event.relative.x * s
 		pitch = clampf(pitch - event.relative.y * s, -1.55, 1.55)
 		rotation.y = yaw
 		cam.rotation.x = pitch
-	if event.is_action_pressed("ads") and weapon["def"].get("scope", false):
-		scope_toggle = not scope_toggle
-	if event.is_action_pressed("slot1") and primary.size() > 0:
-		weapon = primary
-		slot = "primary"
+	if event.is_action_pressed("ads"):
+		ads = true
+	if event.is_action_released("ads"):
+		ads = false
+	if event.is_action_pressed("slot1"):
+		if primary.size() > 0:
+			weapon = primary
+			slot = "primary"
+		else:
+			main.sfx.play("deny")
 	if event.is_action_pressed("slot2"):
 		weapon = secondary
 		slot = "secondary"
+	if event.is_action_pressed("slot3"):
+		weapon = knife_w
+		slot = "knife"
 	if event.is_action_pressed("reload"):
 		_start_reload()
 	if event.is_action_pressed("ability_c"):
@@ -208,10 +222,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_released("scoreboard"):
 		main.hud.show_board(false)
 	if event is InputEventKey and event.pressed and event.physical_keycode == KEY_ESCAPE:
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED else Input.MOUSE_MODE_CAPTURED
+		main.hud.toggle_pause()
 
 func _scoped() -> bool:
-	return weapon["def"].get("scope", false) and scope_toggle
+	return weapon["def"].get("scope", false) and ads
 
 func _physics_process(dt: float) -> void:
 	if not alive:
@@ -239,7 +253,7 @@ func _physics_process(dt: float) -> void:
 	if Input.is_action_pressed("move_right"): dir += r
 	dir.y = 0
 	dir = dir.normalized()
-	var spd := SPEED * (0.52 if walk else 1.0) * (0.55 if crouching else 1.0)
+	var spd := SPEED * (0.52 if walk else 1.0) * (0.55 if crouching else 1.0) * (0.75 if ads else 1.0)
 	if now < slow_until: spd *= 0.45
 	if now < daze_until: spd *= 0.6
 	if now < stim_until: spd *= 1.12
@@ -250,9 +264,14 @@ func _physics_process(dt: float) -> void:
 	elif Input.is_action_pressed("jump") and channel == "":
 		velocity.y = JUMP_VEL
 	move_and_slide()
+	step_acc += Vector2(velocity.x, velocity.z).length() * dt
+	if step_acc > 2.8:
+		step_acc = 0.0
+		if not walk and not crouching:
+			main.sfx.play("step")
 
 	cam.position.y = 1.15 if crouching else 1.55
-	cam.fov = lerpf(cam.fov, 30.0 if _scoped() else 71.0, dt * 14.0)
+	cam.fov = lerpf(cam.fov, (30.0 if _scoped() else (fov_base * 0.82 if ads else fov_base)), dt * 14.0)
 	# 视模摆动/后座/换弹动画
 	bob_t += Vector2(velocity.x, velocity.z).length() * dt * 1.8
 	vm_kick = move_toward(vm_kick, 0.0, dt * 0.6)
@@ -276,14 +295,22 @@ func _physics_process(dt: float) -> void:
 		if rocket_ult > 0:
 			rocket_ult -= 1
 			weapon["next_fire"] = now + 0.9
+			main.sfx.shot("rifle")
 			main.throw_grenade(self, "nade_throw", eye_pos(), aim_dir())
 		elif knife_ult > 0:
 			knife_ult -= 1
 			weapon["next_fire"] = now + 0.33
+			main.sfx.shot("melee")
 			main.hitscan(self, eye_pos(), aim_dir(), {"range": 60, "dmg": {"h": 150, "b": 50, "l": 50}})
+		elif weapon["def"]["cat"] == "melee":
+			weapon["next_fire"] = now + weapon["def"]["fi"]
+			vm_kick += 0.05
+			main.sfx.shot("melee")
+			main.hitscan(self, eye_pos(), aim_dir(), weapon["def"])
 		elif weapon["ammo"] > 0:
 			_shoot(now)
 		else:
+			main.sfx.play("dry")
 			_start_reload()
 	bloom = move_toward(bloom, 0, 4.4 * dt)
 	recoil = move_toward(recoil, 0, 8.0 * dt)
@@ -346,6 +373,7 @@ func _shoot(now: float) -> void:
 	if crouching: spread *= 0.8
 	if _scoped(): spread *= 0.25
 	if now < daze_until: spread *= 1.8
+	if ads and not _scoped(): spread *= 0.55
 	var pellets: int = weapon["def"].get("pellets", 1)
 	for i in range(pellets):
 		var d := aim_dir()
@@ -354,13 +382,16 @@ func _shoot(now: float) -> void:
 	bloom += 0.5
 	recoil += 1.4
 	vm_kick += 0.02
-	cam.rotation.x = clampf(cam.rotation.x + 0.006, -1.55, 1.55)
+	pitch = clampf(pitch + 0.006 * (0.5 if ads else 1.0), -1.55, 1.55)
+	cam.rotation.x = pitch
+	main.sfx.shot(weapon["def"]["cat"])
 	main.spawn_particles(eye_pos() + aim_dir() * 0.9, Color(1.0, 0.85, 0.5), 3, 1.5, 0.1)
 
 func _start_reload() -> void:
 	if weapon["reload_end"] > 0 or weapon["reserve"] <= 0 or weapon["ammo"] >= weapon["def"]["mag"]:
 		return
 	weapon["reload_end"] = main.now() + weapon["def"]["rl"]
+	main.sfx.play("reload")
 
 func take_damage(dmg: float, killer: Node = null, _hs: bool = false) -> void:
 	if not alive:
@@ -371,6 +402,7 @@ func take_damage(dmg: float, killer: Node = null, _hs: bool = false) -> void:
 	armor -= int(absorb)
 	hp -= dmg - absorb
 	main.hud.damaged()
+	main.sfx.play("hurt")
 	if hp <= 0:
 		alive = false
 		deaths += 1
