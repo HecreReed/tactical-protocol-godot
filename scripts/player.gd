@@ -3,6 +3,7 @@ extends CharacterBody3D
 
 const Weapons := preload("res://scripts/weapons.gd")
 const Ab := preload("res://scripts/abilities.gd")
+const Mechanics := preload("res://scripts/agent_mechanics.gd")
 
 const SPEED := 6.0
 const CAT_SPEED := { "melee": 1.12, "pistol": 1.0, "smg": 0.96, "rifle": 0.9, "sniper": 0.84, "heavy": 0.82, "shotgun": 0.96 }
@@ -12,11 +13,14 @@ const SENS := 0.0022
 
 var main: Node3D
 var cam: Camera3D
-var agent_id := "fengying"
+var agent_id := "astra"
 var ability_slots: Dictionary = {}
+var ability_state: Dictionary = {}
+var resources: Dictionary = {}
 var ult_points := 0
 var hp := 100.0
 var armor := 0
+var armor_max := 0
 var armor_bought_round := -1
 var money := 800
 var team := "ally"
@@ -61,6 +65,9 @@ var sens_mult := 1.0
 var fov_base := 71.0
 var step_acc := 0.0
 var cast_mode := ""
+var prepared_cast: Dictionary = {}
+var heal_queue := 0.0
+var speed_mul := 1.0
 var next_pickup_t := 0.0
 var mouse_ignore_until := 0.0
 var _was_captured := true
@@ -86,6 +93,7 @@ func _ready() -> void:
 	knife_w = { "id": "knife", "def": { "name": "战术刀", "cat": "melee", "cost": 0, "mag": -1, "res": -1, "fi": 0.55, "rl": 0.0, "dmg": {"h": 100, "b": 50, "l": 50}, "spread": 0.0, "range": 2.6 }, "ammo": -1, "reserve": -1, "reload_end": 0.0, "next_fire": 0.0 }
 	weapon = secondary
 	ability_slots = Ab.make_slots(agent_id)
+	Mechanics.init_agent_state(self)
 	if observer:
 		alive = false
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -224,6 +232,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		rotation.y = yaw
 		cam.rotation.x = pitch
 	if event.is_action_pressed("ads"):
+		if cast_mode != "":
+			var alt_cast := prepared_cast
+			cast_mode = ""
+			prepared_cast = {}
+			if Ab.confirm_cast(main, self, alt_cast, true):
+				main.sfx.play("ability")
+			return
 		ads = true
 	if event.is_action_released("ads"):
 		ads = false
@@ -263,25 +278,29 @@ func _unhandled_input(event: InputEvent) -> void:
 		main.hud.toggle_pause()
 
 func _equip_ability(k: String) -> void:
-	# 无畏契约式装备施法：按键拿到手上，左键释放，再按同键收回
 	if cast_mode == k:
+		Ab.cancel_cast(prepared_cast)
 		cast_mode = ""
+		prepared_cast = {}
 		return
-	var sl: Dictionary = ability_slots[k]
-	if k == "x":
-		if ult_points < Ab.AGENTS[agent_id]["ult_cost"]:
-			main.sfx.play("deny")
-			return
-		# 切换型大招直接激活（锋刃/火箭/猎杀）
-		var xt: String = Ab.AGENTS[agent_id]["x"]["type"]
-		if xt in ["knife_ult", "rocket_ult", "hunter_ult", "phoenix_ult", "null_pulse", "shadow_ult"]:
-			if Ab.cast(main, self, "x"):
-				main.sfx.play("ability")
-			return
-	elif sl["n"] <= 0 or (k == "e" and main.now() < sl["cd_until"]):
+	if cast_mode != "":
+		Ab.cancel_cast(prepared_cast)
+		cast_mode = ""
+		prepared_cast = {}
+	var phase := "live" if main.can_fight() else "inactive"
+	var prepared := Ab.start_cast(self, k, main.now(), main.can_fight(), phase)
+	if not bool(prepared.get("ok", false)):
 		main.sfx.play("deny")
 		return
-	cast_mode = k
+	var type := String(prepared["type"])
+	if Ab.requires_equip(type):
+		prepared_cast = prepared
+		cast_mode = k
+	else:
+		if Ab.confirm_cast(main, self, prepared):
+			main.sfx.play("ability")
+		else:
+			main.sfx.play("deny")
 
 func _ads_active() -> bool:
 	# 近战/手持技能/大招武器不能瞄准
@@ -302,6 +321,7 @@ func _physics_process(dt: float) -> void:
 		cam.position = Vector3(0, 1.55, 0)
 		cam.rotation = Vector3(pitch, 0, 0)
 	var now: float = main.now()
+	Mechanics.tick(self, now, dt)
 	var cap := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
 	if cap and not _was_captured:
 		mouse_ignore_until = now + 0.15
@@ -322,7 +342,7 @@ func _physics_process(dt: float) -> void:
 	if Input.is_action_pressed("move_right"): dir += r
 	dir.y = 0
 	dir = dir.normalized()
-	var spd: float = SPEED * CAT_SPEED.get(weapon["def"]["cat"], 1.0) * (0.52 if walk else 1.0) * (0.55 if crouching else 1.0) * (0.75 if _ads_active() else 1.0)
+	var spd: float = SPEED * speed_mul * CAT_SPEED.get(weapon["def"]["cat"], 1.0) * (0.52 if walk else 1.0) * (0.55 if crouching else 1.0) * (0.75 if _ads_active() else 1.0)
 	_wish_dir = dir
 	if now < slow_until: spd *= 0.45
 	if now < daze_until: spd *= 0.6
@@ -367,9 +387,10 @@ func _physics_process(dt: float) -> void:
 		weapon["reload_end"] = 0.0
 	# 射击（含大招武器）
 	if cast_mode != "" and Input.is_action_just_pressed("fire"):
-		var ck := cast_mode
+		var cast_to_confirm := prepared_cast
 		cast_mode = ""
-		if Ab.cast(main, self, ck):
+		prepared_cast = {}
+		if Ab.confirm_cast(main, self, cast_to_confirm):
 			main.sfx.play("ability")
 		return
 	var fire_held := Input.is_action_pressed("fire")
@@ -549,6 +570,7 @@ func revive_reset(pos: Vector3) -> void:
 	velocity = Vector3.ZERO
 	channel = ""
 	cast_mode = ""
+	prepared_cast = {}
 	ads = false
 	knife_ult = 0
 	rocket_ult = 0
@@ -559,6 +581,7 @@ func revive_reset(pos: Vector3) -> void:
 	daze_until = 0.0
 	slow_until = 0.0
 	suppressed_until = 0.0
+	Mechanics.on_round_start(self)
 	# 双枪弹药全部补满（存活继承武器，弹药每回合重置）
 	for w in [primary, secondary]:
 		if w.size() > 0:

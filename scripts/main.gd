@@ -38,7 +38,7 @@ func _ready() -> void:
 	print("[BOOT] menu built")
 	var auto := OS.get_environment("TP_AUTOSTART")
 	if auto != "":
-		call_deferred("_start_game", auto, "fengying", false)
+		call_deferred("_start_game", auto, "astra", false)
 
 # ---------------- 菜单（复刻网页版：地图卡片+难度 → 特工卡片 / 观战模式） ----------------
 const MC_BG := Color8(0x0f, 0x19, 0x23)
@@ -319,7 +319,7 @@ func _start_game(map_id: String, agent_id: String, obs: bool = false) -> void:
 
 	player = PlayerScript.new()
 	player.main = self
-	player.agent_id = agent_id if agent_id != "" else "fengying"
+	player.agent_id = agent_id if agent_id != "" else "astra"
 	player.observer = observer
 	add_child(player)
 	hud.setup(self)

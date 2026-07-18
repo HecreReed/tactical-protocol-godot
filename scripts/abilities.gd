@@ -1,236 +1,640 @@
-# abilities.gd — 11 特工完整技能组（与网页版对位）+ 技能执行器
 class_name Abilities
+extends RefCounted
 
-const AGENTS := {
-	"fengying": { "role":"决斗者", "desc":"高机动位移刺客", "name":"风影", "color":Color(0.56,0.83,1.0), "ult_cost":7,
-		"c":{"name":"云雾烟弹","cost":250,"max":1,"type":"smoke_throw"},
-		"q":{"name":"上升气流","cost":150,"max":2,"type":"updraft"},
-		"e":{"name":"疾风突进","cost":0,"max":1,"cd":22.0,"type":"dash"},
-		"x":{"name":"锋刃风暴","type":"knife_ult"} },
-	"lieyan": { "role":"决斗者", "desc":"闪光突破手，浴火自愈", "name":"烈焰", "color":Color(1.0,0.48,0.19), "ult_cost":7,
-		"c":{"name":"烈焰之墙","cost":200,"max":1,"type":"firewall"},
-		"q":{"name":"曲光弹","cost":250,"max":2,"type":"flash_throw"},
-		"e":{"name":"火热双手","cost":0,"max":1,"cd":0.0,"type":"hot_hands"},
-		"x":{"name":"涅槃重生","type":"phoenix_ult"} },
-	"tianqiong": { "role":"控场者", "desc":"远程烟幕与火力支援", "name":"天穹", "color":Color(0.96,0.77,0.42), "ult_cost":8,
-		"c":{"name":"燃烧榴弹","cost":250,"max":1,"type":"molly_throw"},
-		"q":{"name":"兴奋信标","cost":100,"max":2,"type":"stim_beacon"},
-		"e":{"name":"空降烟幕","cost":0,"max":2,"cd":20.0,"type":"smoke_sky"},
-		"x":{"name":"轨道打击","type":"orbital"} },
-	"anmu": { "role":"控场者", "desc":"穿墙致盲与暗影传送", "name":"暗幕", "color":Color(0.54,0.44,0.85), "ult_cost":7,
-		"c":{"name":"暗影潜行","cost":100,"max":1,"type":"shadow_step"},
-		"q":{"name":"弥影闪","cost":250,"max":1,"type":"paranoia"},
-		"e":{"name":"迷影烟幕","cost":0,"max":2,"cd":25.0,"type":"smoke_sky"},
-		"x":{"name":"从影而袭","type":"shadow_ult"} },
-	"lieying": { "role":"先锋", "desc":"情报侦查与穿墙猎杀", "name":"猎鹰", "color":Color(0.41,0.78,0.49), "ult_cost":8,
-		"c":{"name":"猫头鹰侦察机","cost":300,"max":1,"type":"drone_scan"},
-		"q":{"name":"震爆箭","cost":150,"max":2,"type":"shock_throw"},
-		"e":{"name":"侦察之箭","cost":0,"max":1,"cd":35.0,"type":"recon_throw"},
-		"x":{"name":"猎手之怒","type":"hunter_ult"} },
-	"shengyu": { "role":"哨卫", "desc":"治疗、屏障与复生", "name":"圣愈", "color":Color(0.91,0.9,0.85), "ult_cost":8,
-		"c":{"name":"屏障之墙","cost":400,"max":1,"type":"wall"},
-		"q":{"name":"缓速球","cost":200,"max":2,"type":"slow_throw"},
-		"e":{"name":"治愈之光","cost":0,"max":1,"cd":45.0,"type":"heal"},
-		"x":{"name":"复生","type":"rez"} },
-	"leiyi": { "role":"决斗者", "desc":"爆破狂人·炸药开路强攻", "name":"雷奕", "color":Color(1.0,0.6,0.24), "ult_cost":8,
-		"c":{"name":"轰轰机器人","cost":300,"max":1,"type":"boom_bot"},
-		"q":{"name":"爆破背包","cost":200,"max":2,"type":"blast_jump"},
-		"e":{"name":"彩弹集束雷","cost":0,"max":1,"cd":0.0,"type":"nade_throw"},
-		"x":{"name":"毁灭者火箭","type":"rocket_ult"} },
-	"zhuying": { "role":"哨卫", "desc":"装置大师·蜂群警报炮塔封区", "name":"蛛影", "color":Color(0.75,0.8,0.85), "ult_cost":8,
-		"c":{"name":"纳米蜂群","cost":200,"max":2,"type":"nano_throw"},
-		"q":{"name":"警报机器人","cost":200,"max":1,"type":"alarm_bot"},
-		"e":{"name":"哨戒炮塔","cost":0,"max":1,"cd":0.0,"type":"turret"},
-		"x":{"name":"全域封锁","type":"lockdown"} },
-	"lanqie": { "role":"先锋", "desc":"震荡先锋·穿墙震慑破防", "name":"岚切", "color":Color(0.85,0.65,0.35), "ult_cost":8,
-		"c":{"name":"震荡爆破","cost":200,"max":2,"type":"quake"},
-		"q":{"name":"穿墙闪光","cost":250,"max":2,"type":"wall_flash"},
-		"e":{"name":"裂地震波","cost":0,"max":1,"cd":35.0,"type":"stun_wave"},
-		"x":{"name":"雷动九天","type":"big_stun"} },
-	"qingzhen": { "role":"控场者", "desc":"毒术师·毒幕毒池切割战场", "name":"青鸩", "color":Color(0.35,0.85,0.5), "ult_cost":8,
-		"c":{"name":"蛇噬毒液","cost":200,"max":2,"type":"acid_throw"},
-		"q":{"name":"剧毒云雾","cost":200,"max":1,"type":"toxic_smoke"},
-		"e":{"name":"蔓延毒幕","cost":0,"max":1,"cd":32.0,"type":"toxic_wall"},
-		"x":{"name":"万毒领域","type":"toxic_dome"} },
-	"lingshi": { "role":"先锋", "desc":"战术机体·压制脉冲禁技", "name":"零式", "color":Color(0.62,0.71,1.0), "ult_cost":7,
-		"c":{"name":"破片雷","cost":200,"max":1,"type":"nade_throw"},
-		"q":{"name":"电光闪雷","cost":250,"max":2,"type":"flash_throw"},
-		"e":{"name":"零点压制刃","cost":0,"max":1,"cd":0.0,"type":"suppress_throw"},
-		"x":{"name":"湮灭脉冲","type":"null_pulse"} },
-	"yinglie": { "role":"哨卫", "desc":"情报大师·绊网囚笼监控全场", "name":"影猎", "color":Color8(0xd8,0xd0,0xb8), "ult_cost":7,
-		"c": { "name":"诡雷绊网", "cost":200, "max":2, "type":"tripwire" },
-		"q": { "name":"暗网囚笼", "cost":100, "max":2, "type":"cage" },
-		"e": { "name":"幽灵之眼", "cost":0, "max":1, "cd":30.0, "type":"drone_scan" },
-		"x": { "name":"窃梦神偷", "cost":0, "max":1, "type":"reveal_all" } },
-	"meiying": { "role":"决斗者", "desc":"嗜杀女皇·击杀吞噬回血遁形", "name":"魅影", "color":Color8(0xc4,0x5a,0xd0), "ult_cost":7,
-		"c": { "name":"魅惑之眼", "cost":250, "max":1, "type":"paranoia" },
-		"q": { "name":"吞噬", "cost":200, "max":2, "type":"devour" },
-		"e": { "name":"虚空遁形", "cost":0, "max":1, "cd":26.0, "type":"dismiss" },
-		"x": { "name":"女皇仪式", "cost":0, "max":1, "type":"empress" } },
-	"lingyu": { "role":"先锋", "desc":"自然向导·群疗闪光追猎开路", "name":"灵愈", "color":Color8(0x9f,0xe0,0x8a), "ult_cost":8,
-		"c": { "name":"再生之种", "cost":200, "max":1, "cd":22.0, "type":"heal" },
-		"q": { "name":"引导之光", "cost":250, "max":2, "type":"flash_throw" },
-		"e": { "name":"开拓猛虎", "cost":0, "max":1, "cd":30.0, "type":"boom_bot" },
-		"x": { "name":"追猎之灵", "cost":0, "max":1, "type":"seekers" } },
+const Catalog := preload("res://scripts/agent_catalog.gd")
+const Runtime := preload("res://scripts/ability_runtime.gd")
+const Mechanics := preload("res://scripts/agent_mechanics.gd")
+const Weapons := preload("res://scripts/weapons.gd")
+const SLOT_KEYS := ["c", "q", "e", "x"]
+
+# Every upstream runtime type is registered explicitly. Values name the world adapter family.
+const HANDLERS := {
+	"astraGravity": "astra", "astraNova": "astra", "astraNebula": "astra", "astraDivide": "wall",
+	"quake": "quake", "wallFlash": "blind", "stunWave": "daze", "bigStun": "daze",
+	"stimBeacon": "device", "molly": "projectile", "smokeSky": "smoke", "orbital": "orbital",
+	"chamberTrademark": "device", "chamberHeadhunter": "weapon", "chamberRendezvous": "recast", "chamberTourDeForce": "weapon",
+	"clovePickMeUp": "self_buff", "cloveMeddle": "projectile", "cloveRuse": "smoke", "cloveRevive": "revive",
+	"cypherTrapwire": "device", "cypherCage": "recast", "cypherSpycam": "control", "cypherNeuralTheft": "reveal",
+	"deadlockGravNet": "projectile", "deadlockSensor": "device", "deadlockBarrier": "wall", "deadlockAnnihilation": "tether",
+	"fadeProwler": "control", "fadeSeize": "tether", "fadeHaunt": "reveal", "fadeNightfall": "reveal",
+	"gekkoMosh": "projectile", "gekkoWingman": "control", "gekkoDizzy": "control", "gekkoThrash": "control",
+	"harborStormSurge": "zone", "harborHighTide": "wall", "harborCove": "recast", "harborReckoning": "daze",
+	"isoContingency": "wall", "isoUndercut": "debuff", "isoDoubleTap": "self_buff", "isoKillContract": "tether",
+	"smokeProj": "projectile", "updraft": "movement", "jettTailwind": "recast", "knifeUlt": "weapon",
+	"fragNade": "projectile", "flash": "projectile", "suppressNade": "projectile", "kayoNullCmd": "suppress",
+	"nanoSwarm": "projectile", "alarmBot": "device", "turret": "device", "lockdown": "device",
+	"miksPulse": "zone", "miksHarmonize": "heal", "miksWaveform": "smoke", "miksBassquake": "daze",
+	"neonFastLane": "wall", "neonRelayBolt": "projectile", "neonHighGear": "recast", "neonOverdrive": "weapon",
+	"shadowStep": "teleport", "paranoia": "blind", "shadowUlt": "teleport",
+	"firewall": "wall", "hotHands": "projectile", "phoenixRunItBack": "recast",
+	"boomBot": "control", "razeBlastPack": "recast", "bignade": "projectile", "rocketUlt": "weapon",
+	"reynaLeer": "blind", "reynaDevour": "heal", "reynaDismiss": "movement", "reynaEmpress": "self_buff",
+	"wall": "wall", "slowProj": "projectile", "heal": "heal", "rez": "revive",
+	"skyeRegrowth": "heal", "skyeTrailblazer": "control", "skyeGuidingLight": "projectile", "skyeSeekers": "reveal",
+	"sovaDrone": "control", "shock": "projectile", "recon": "projectile", "hunterUlt": "weapon",
+	"tejoDrone": "control", "tejoDelivery": "projectile", "tejoSalvo": "orbital", "tejoArmageddon": "orbital",
+	"vetoCrosscut": "recast", "vetoChokehold": "projectile", "vetoInterceptor": "device", "vetoEvolution": "self_buff",
+	"acidPool": "projectile", "toxicSmoke": "recast", "toxicWall": "recast", "toxicDome": "zone",
+	"vyseRazorvine": "projectile", "vyseShear": "device", "vyseArcRose": "blind", "vyseSteelGarden": "debuff",
+	"waylaySaturate": "projectile", "waylayLightspeed": "movement", "waylayRefract": "recast", "waylayConvergent": "daze",
+	"yoruFakeout": "control", "yoruBlindside": "projectile", "yoruGatecrash": "recast", "yoruDrift": "self_buff",
 }
 
-# 投掷类：由 RigidBody3D 真实物理弹跳后触发
-const THROWN := ["smoke_throw","flash_throw","molly_throw","slow_throw","nade_throw",
-	"suppress_throw","acid_throw","shock_throw","recon_throw","nano_throw","hot_hands","toxic_smoke"]
+static var AGENTS: Dictionary = _build_compat_agents()
+
+static func agent_ids() -> Array[String]:
+	return Catalog.agent_ids()
+
+static func has_handler(type: String) -> bool:
+	return HANDLERS.has(type)
+
+static func handler_types() -> Array[String]:
+	var result: Array[String] = []
+	for type in HANDLERS:
+		result.append(String(type))
+	result.sort()
+	return result
+
+static func requires_equip(type: String) -> bool:
+	return HANDLERS.get(type, "") in [
+		"projectile", "wall", "smoke", "orbital", "teleport", "blind", "device", "zone", "tether",
+	]
 
 static func make_slots(agent_id: String) -> Dictionary:
-	var a: Dictionary = AGENTS[agent_id]
+	if not Catalog.has_agent(agent_id):
+		return {}
 	var slots := {}
-	for k in ["c", "q", "e"]:
-		var d: Dictionary = a[k]
-		slots[k] = { "def": d, "n": d.get("start", 1), "cd_until": 0.0 }
-	slots["x"] = { "def": a["x"], "n": 0, "cd_until": 0.0 }
+	for key in SLOT_KEYS:
+		var definition := Catalog.ability(agent_id, key)
+		slots[key] = {
+			"def": definition,
+			"n": int(definition.get("start", 0)),
+			"cd_until": 0.0,
+		}
 	return slots
 
-# 执行技能：ent 为玩家或 AI；main 提供战场服务
-static func cast(main: Node3D, ent: Node, key: String) -> bool:
-	var slots: Dictionary = ent.ability_slots
+static func start_cast(
+	entity: Variant,
+	key: String,
+	now: float,
+	fight_enabled: bool,
+	phase: String = "live",
+) -> Dictionary:
+	var agent_id := _agent_id(entity)
+	if not Catalog.has_agent(agent_id) or not key in SLOT_KEYS:
+		return _rejected("unknown-slot")
+	var definition := Catalog.ability(agent_id, key)
+	var type := String(definition.get("type", ""))
+	if not has_handler(type):
+		return _rejected("missing-handler")
+
+	var alive := bool(_read_value(entity, "alive", true))
+	var clove_afterlife := (
+		agent_id == "clove"
+		and not alive
+		and (
+			type == "cloveRevive"
+			or Mechanics.can_clove_post_death_cast(entity, type, now)
+		)
+	)
+	if not alive and not clove_afterlife:
+		return _rejected("dead")
+	if not fight_enabled or not phase in ["live", "planted"]:
+		return _rejected("phase")
+	var channel = _read_value(entity, "channel", "")
+	if channel != null and String(channel) != "":
+		return _rejected("channel")
+	if now < float(_read_value(entity, "suppressed_until", 0.0)):
+		return _rejected("suppressed")
+
+	var slots := _ability_slots(entity)
+	if not slots.has(key):
+		return _rejected("missing-slot-state")
 	var slot: Dictionary = slots[key]
-	var def: Dictionary = slot["def"]
-	var now: float = main.now()
-	if not main.can_fight():
-		return false
-	if now < ent.suppressed_until:
-		return false
+	var recast := _is_recast(entity, type, now)
 	if key == "x":
-		var cost: int = AGENTS[ent.agent_id]["ult_cost"]
-		if ent.ult_points < cost:
+		var ultimate_cost := int(Catalog.agent(agent_id).get("ultCost", 0))
+		if int(_read_value(entity, "ult_points", 0)) < ultimate_cost:
+			return _rejected("ultimate-points")
+	elif not recast and int(slot.get("n", 0)) <= 0:
+		return _rejected("charges")
+	if not recast and now < float(slot.get("cd_until", 0.0)):
+		return _rejected("cooldown")
+	return {
+		"ok": true,
+		"reason": "",
+		"agent_id": agent_id,
+		"key": key,
+		"type": type,
+		"definition": definition,
+		"slot": slot,
+		"now": now,
+		"recast": recast,
+		"canceled": false,
+		"confirmed": false,
+	}
+
+static func confirm_cast(
+	world: Variant,
+	entity: Variant,
+	cast_state: Dictionary,
+	alt: bool = false,
+	executor: Callable = Callable(),
+) -> bool:
+	if (
+		cast_state.is_empty()
+		or not bool(cast_state.get("ok", false))
+		or bool(cast_state.get("canceled", false))
+		or bool(cast_state.get("confirmed", false))
+	):
+		return false
+	if world != null:
+		if not bool(world.can_fight()):
 			return false
+		if not bool(_read_value(entity, "alive", true)) and String(cast_state["type"]) != "cloveRevive" \
+				and not Mechanics.can_clove_post_death_cast(entity, String(cast_state["type"]), float(world.now())):
+			return false
+		if float(world.now()) < float(_read_value(entity, "suppressed_until", 0.0)):
+			return false
+		cast_state["now"] = float(world.now())
+	var used := false
+	if executor.is_valid():
+		used = bool(executor.call(
+			world,
+			entity,
+			String(cast_state["key"]),
+			cast_state["definition"],
+			alt,
+		))
 	else:
-		if slot["n"] <= 0:
+		used = _perform(
+			world,
+			entity,
+			String(cast_state["key"]),
+			cast_state["definition"],
+			float(cast_state["now"]),
+			bool(cast_state["recast"]),
+			alt,
+		)
+	if not used:
+		return false
+	cast_state["confirmed"] = true
+	var key := String(cast_state["key"])
+	if key == "x":
+		_write_value(entity, "ult_points", 0)
+	elif not bool(cast_state["recast"]):
+		Runtime.commit_ability(cast_state["slot"], true)
+	var cooldown := float(cast_state["definition"].get("cd", 0.0))
+	if key != "x" and not bool(cast_state["recast"]) and cooldown > 0.0:
+		cast_state["slot"]["cd_until"] = float(cast_state["now"]) + cooldown
+	return true
+
+static func cancel_cast(cast_state: Dictionary) -> void:
+	if not cast_state.is_empty():
+		cast_state["canceled"] = true
+
+static func cast(world: Variant, entity: Variant, key: String, alt: bool = false) -> bool:
+	if world == null:
+		return false
+	var now := float(world.now())
+	var phase := "live" if world.can_fight() else "inactive"
+	var prepared := start_cast(entity, key, now, bool(world.can_fight()), phase)
+	return confirm_cast(world, entity, prepared, alt)
+
+static func cast_for_bot(
+	world: Variant,
+	entity: Variant,
+	key: String,
+	now: float = -1.0,
+	executor: Callable = Callable(),
+) -> bool:
+	var clock := now
+	var fight_enabled := true
+	if world != null:
+		if clock < 0.0:
+			clock = float(world.now())
+		fight_enabled = bool(world.can_fight())
+	if clock < 0.0:
+		clock = 0.0
+	var prepared := start_cast(entity, key, clock, fight_enabled)
+	return confirm_cast(world, entity, prepared, false, executor)
+
+static func _perform(
+	world: Variant,
+	entity: Variant,
+	key: String,
+	definition: Dictionary,
+	now: float,
+	recast: bool,
+	alt: bool,
+) -> bool:
+	if world == null:
+		return false
+	var type := String(definition["type"])
+	var position := _position(entity)
+	var direction := _aim_direction(entity)
+	var forward := Vector3(direction.x, 0.0, direction.z).normalized()
+	if forward.is_zero_approx():
+		forward = Vector3.FORWARD
+	var target_point := position + forward * 12.0
+	var state := _state(entity)
+	var resources := _resources(entity)
+	match type:
+		"smokeProj": world.throw_grenade(entity, "smoke_throw", _eye_position(entity), direction)
+		"flash", "skyeGuidingLight", "yoruBlindside": world.throw_grenade(entity, "flash_throw", _eye_position(entity), direction)
+		"molly": world.throw_grenade(entity, "molly_throw", _eye_position(entity), direction)
+		"slowProj": world.throw_grenade(entity, "slow_throw", _eye_position(entity), direction)
+		"shock": world.throw_grenade(entity, "shock_throw", _eye_position(entity), direction)
+		"recon": world.throw_grenade(entity, "recon_throw", _eye_position(entity), direction)
+		"fragNade", "bignade": world.throw_grenade(entity, type, _eye_position(entity), direction)
+		"suppressNade": world.throw_grenade(entity, "suppress_throw", _eye_position(entity), direction)
+		"nanoSwarm": world.throw_grenade(entity, "nano_throw", _eye_position(entity), direction)
+		"acidPool": world.throw_grenade(entity, "acid_throw", _eye_position(entity), direction)
+		"toxicSmoke":
+			if recast:
+				state["toxicSmoke"]["active"] = not bool(state["toxicSmoke"].get("active", false))
+				Mechanics.set_viper_emitter(entity, "cloud", state["toxicSmoke"]["active"])
+				if state["toxicSmoke"]["active"]:
+					world.spawn_smoke(state["toxicSmoke"]["pos"], 3.8, 12.0)
+				return true
+			state["toxicSmoke"] = {"pos": target_point, "active": true}
+			Mechanics.set_viper_emitter(entity, "cloud", true)
+			world.spawn_smoke(target_point, 3.8, 12.0)
+		"hotHands": world.throw_grenade(entity, "hot_hands", _eye_position(entity), direction)
+		"deadlockGravNet", "cloveMeddle", "gekkoMosh", "tejoDelivery", "vetoChokehold", "vyseRazorvine", "waylaySaturate", "neonRelayBolt":
+			world.throw_grenade(entity, type, _eye_position(entity), direction)
+		"updraft":
+			var velocity := _velocity(entity)
+			velocity.y = 11.0
+			_set_velocity(entity, velocity)
+		"jettTailwind":
+			if not state.has("jett_dash"):
+				Mechanics.prime_jett_dash(entity, now)
+				return false
+			if not Mechanics.consume_jett_dash(entity, now):
+				return false
+			_set_velocity(entity, forward * 18.0 + Vector3.UP * 0.5)
+		"knifeUlt": _write_value(entity, "knife_ult", 5)
+		"rocketUlt": _write_value(entity, "rocket_ult", 1)
+		"hunterUlt": _write_value(entity, "arrow_ult", 3)
+		"neonOverdrive":
+			state["overdrive_until"] = now + 20.0
+			resources["energy"] = 100.0
+		"chamberHeadhunter": _grant_weapon(entity, "sheriff", false, true)
+		"chamberTourDeForce":
+			_grant_weapon(entity, "operator", true, true)
+			state["tour_de_force"] = true
+		"wall": world.spawn_wall(position, _yaw(entity), 30.0)
+		"firewall": world.spawn_firewall(entity, position, direction)
+		"deadlockBarrier": world.spawn_wall(position + forward * 4.0, _yaw(entity), 30.0)
+		"astraDivide": world.spawn_wall(position + forward * 8.0, _yaw(entity), 21.0)
+		"harborHighTide":
+			for index in range(1, 13):
+				world.spawn_smoke(position + forward * index * 2.2, 1.6, 12.0)
+		"neonFastLane":
+			var side := Vector3(-forward.z, 0.0, forward.x)
+			for index in range(1, 9):
+				for sign in [-1.0, 1.0]:
+					world.spawn_smoke(position + forward * index * 2.5 + side * sign * 2.2, 1.15, 6.0)
+		"isoContingency":
+			for index in range(1, 8):
+				world.spawn_smoke(position + forward * index * 2.2, 1.7, 5.0)
+		"quake": world.delayed_quake(entity, position + forward * 7.5)
+		"wallFlash", "paranoia": world.cone_blind(entity, 20.0, 0.65, 1.6)
+		"stunWave": world.cone_daze(entity, 18.0, 0.72, 2.4)
+		"bigStun", "waylayConvergent": world.cone_daze(entity, 26.0, 0.55, 3.2)
+		"miksBassquake": world.cone_daze(entity, 28.0, 0.55, 2.5)
+		"harborReckoning": world.cone_daze(entity, 32.0, 0.65, 3.0)
+		"stimBeacon": world.spawn_device(entity, "beacon", position + forward * 1.2)
+		"alarmBot", "deadlockSensor", "chamberTrademark": world.spawn_device(entity, "alarm", target_point)
+		"turret": world.spawn_device(entity, "turret", position + forward * 1.4)
+		"lockdown": world.spawn_device(entity, "lockdown", position)
+		"cypherTrapwire", "vyseShear": world.spawn_device(entity, "trap", target_point)
+		"vetoInterceptor": world.spawn_device(entity, "interceptor", target_point)
+		"smokeSky", "miksWaveform": world.smoke_site_chokes(entity)
+		"cloveRuse": world.spawn_smoke(target_point, 4.5, 13.5)
+		"orbital": world.orbital_strike(entity, _eye_position(entity), direction)
+		"tejoSalvo":
+			Mechanics.select_tejo_target(entity, target_point)
+			Mechanics.select_tejo_target(entity, target_point + Vector3.RIGHT * 4.0)
+			for point in state.get("tejo_targets", []):
+				world.explode(entity, point, 4.0, 70.0, 35.0)
+		"tejoArmageddon":
+			for index in range(1, 7):
+				world.orbital_strike(entity, position + Vector3.UP, forward)
+		"shadowStep": world.teleport_forward(entity, 9.0)
+		"shadowUlt": world.teleport_site(entity)
+		"razeBlastPack":
+			if state.has("blast_pack"):
+				var pack: Dictionary = state["blast_pack"]
+				world.explode(entity, pack["pos"], 4.0, 50.0, 15.0)
+				state.erase("blast_pack")
+				return true
+			state["blast_pack"] = {"pos": position + forward * 2.0, "until": now + 5.0}
+		"waylayLightspeed", "reynaDismiss":
+			_set_velocity(entity, forward * (20.0 if type == "waylayLightspeed" else 18.0))
+			if type == "reynaDismiss":
+				if not Mechanics.consume_reyna_soul(entity, "dismiss", now):
+					return false
+				_write_value(entity, "resist_until", now + 2.0)
+		"neonHighGear":
+			if bool(state.get("neon_sprinting", false)):
+				state["neon_sprinting"] = false
+			else:
+				if not Mechanics.start_neon_sprint(entity):
+					return false
+			return true
+		"chamberRendezvous":
+			if recast:
+				return Mechanics.use_rendezvous(entity)
+			Mechanics.place_rendezvous(entity, target_point)
+		"vetoCrosscut", "waylayRefract", "yoruGatecrash":
+			var anchor_key := "veto" if type == "vetoCrosscut" else ("waylay" if type == "waylayRefract" else "yoru")
+			if recast:
+				return Mechanics.return_to_light_anchor(entity, anchor_key, now)
+			Mechanics.place_return_anchor(entity, anchor_key, now + (12.0 if anchor_key == "waylay" else 30.0))
+		"phoenixRunItBack": Mechanics.activate_return_anchor(entity, now + 10.0)
+		"cypherCage":
+			if recast:
+				world.spawn_smoke(state["cypher_cage"]["pos"], 3.4, 7.0)
+				state.erase("cypher_cage")
+				return true
+			state["cypher_cage"] = {"pos": target_point}
+		"harborCove":
+			if recast:
+				state["harbor_cove"]["shielded"] = true
+				world.spawn_device(entity, "cove", state["harbor_cove"]["pos"])
+				return true
+			state["harbor_cove"] = {"pos": target_point, "shielded": false}
+			world.spawn_smoke(target_point, 3.8, 15.0)
+		"toxicWall":
+			if recast:
+				state["toxicWall"]["active"] = not bool(state["toxicWall"].get("active", false))
+				Mechanics.set_viper_emitter(entity, "screen", state["toxicWall"]["active"])
+				if state["toxicWall"]["active"]:
+					world.toxic_wall(entity, direction)
+				return true
+			state["toxicWall"] = {"active": true}
+			Mechanics.set_viper_emitter(entity, "screen", true)
+			world.toxic_wall(entity, direction)
+		"heal":
+			var ally: Variant = _nearest_ally(world, entity, 14.0)
+			if ally == null:
+				ally = entity
+			if float(_read_value(ally, "hp", 100.0)) >= 100.0:
+				return false
+			_write_value(ally, "hp", minf(100.0, float(_read_value(ally, "hp", 0.0)) + 60.0))
+		"skyeRegrowth":
+			if not Mechanics.apply_skye_regrowth(entity, world.combatants(), 1.5):
+				return false
+		"miksHarmonize":
+			var harmonized: Variant = _nearest_ally(world, entity, 14.0)
+			Mechanics.harmonize_pair(entity, harmonized if harmonized != null else entity, now)
+		"reynaDevour":
+			if not Mechanics.consume_reyna_soul(entity, "devour", now):
+				return false
+		"rez":
+			if not bool(world.try_revive(entity)):
+				return false
+		"cloveRevive":
+			state["clove_revive_until"] = now + 5.0
+			if not Mechanics.activate_clove_revive(entity, now):
+				return false
+			state["clove_prove_until"] = now + 12.0
+		"clovePickMeUp":
+			if now > float(state.get("pick_me_up_until", 0.0)):
+				return false
+			_write_value(entity, "hp", minf(100.0, float(_read_value(entity, "hp", 0.0)) + 50.0))
+			_write_value(entity, "stim_until", now + 8.0)
+		"reynaEmpress":
+			_write_value(entity, "empress_until", now + 30.0)
+			_write_value(entity, "stim_until", now + 30.0)
+		"isoDoubleTap": state["double_tap_until"] = now + 12.0
+		"vetoEvolution":
+			state["evolution_until"] = now + 15.0
+			_write_value(entity, "stim_until", now + 15.0)
+			_write_value(entity, "hp", 100.0)
+		"yoruDrift":
+			state["drift_until"] = now + 10.0
+			_write_value(entity, "resist_until", now + 10.0)
+			_write_value(entity, "speed_mul", 1.25)
+		"kayoNullCmd":
+			world.suppress_burst(position, 18.0, 4.0, entity)
+			state["null_cmd_until"] = now + 12.0
+			_write_value(entity, "stim_until", now + 12.0)
+		"reynaLeer", "vyseArcRose": world.flash_burst(target_point + Vector3.UP * 1.8, entity)
+		"cypherNeuralTheft": world.reveal_enemies(entity)
+		"fadeHaunt": world.reveal_area(target_point, 16.0, entity)
+		"fadeNightfall":
+			world.reveal_enemies(entity)
+			world.cone_daze(entity, 30.0, 0.45, 4.0)
+		"skyeSeekers":
+			var enemies := _enemies(world, entity)
+			if enemies.is_empty():
+				return false
+			for enemy in enemies.slice(0, 3):
+				world.send_seeker(entity, enemy)
+		"sovaDrone", "cypherSpycam", "fadeProwler", "gekkoWingman", "gekkoDizzy", "gekkoThrash", "tejoDrone", "skyeTrailblazer", "yoruFakeout":
+			if type in ["sovaDrone", "cypherSpycam", "tejoDrone"]:
+				world.spawn_drone(entity, direction)
+			else:
+				world.spawn_boom_bot(entity, direction)
+		"harborStormSurge": world.spawn_slow_zone(entity, target_point, 4.0, 5.0)
+		"toxicDome": world.toxic_dome(entity, _eye_position(entity), direction)
+		"fadeSeize":
+			for enemy in _enemies(world, entity):
+				if _position(enemy).distance_to(target_point) <= 4.5:
+					_state(enemy)["tether"] = {"pos": target_point, "until": now + 5.0}
+					_write_value(enemy, "slow_until", now + 5.0)
+		"deadlockAnnihilation", "isoKillContract":
+			var target: Variant = _nearest_enemy(world, entity, 24.0)
+			if target == null:
+				return false
+			_state(target)["tether"] = {"owner": entity, "until": now + 7.0}
+			_write_value(target, "suppressed_until", now + 7.0)
+		"isoUndercut":
+			for enemy in _enemies(world, entity):
+				var offset := _position(enemy) - position
+				if offset.length() < 24.0 and forward.dot(offset.normalized()) > 0.75:
+					_state(enemy)["vulnerable_until"] = now + 5.0
+		"miksPulse":
+			if alt:
+				var ally: Variant = _nearest_ally(world, entity, 22.0)
+				if ally != null:
+					_write_value(ally, "hp", minf(100.0, float(_read_value(ally, "hp", 0.0)) + 35.0))
+			else:
+				world.cone_daze(entity, 22.0, 0.65, 3.0)
+		"vyseSteelGarden":
+			for enemy in _enemies(world, entity):
+				if _position(enemy).distance_to(position) < 28.0:
+					_state(enemy)["primary_disabled_until"] = now + 8.0
+		_:
 			return false
-		if key == "e" and now < slot["cd_until"]:
-			return false
-	var t: String = def["type"]
-	var origin: Vector3 = ent.eye_pos()
-	var dir: Vector3 = ent.aim_dir()
-	var used := true
-	if t in THROWN:
-		main.throw_grenade(ent, t, origin, dir)
+	return true
+
+static func _is_recast(entity: Variant, type: String, now: float) -> bool:
+	var state := _state(entity)
+	match type:
+		"jettTailwind":
+			var dash: Dictionary = state.get("jett_dash", {})
+			return not dash.is_empty() and now <= float(dash.get("until", 0.0))
+		"razeBlastPack": return state.has("blast_pack")
+		"toxicSmoke": return state.has("toxicSmoke")
+		"toxicWall": return state.has("toxicWall")
+		"cypherCage": return state.has("cypher_cage")
+		"chamberRendezvous": return state.has("rendezvous")
+		"harborCove": return state.has("harbor_cove")
+		"vetoCrosscut": return state.has("veto_anchor")
+		"waylayRefract": return state.has("waylay_anchor")
+		"yoruGatecrash": return state.has("yoru_anchor")
+	return false
+
+static func _build_compat_agents() -> Dictionary:
+	var result := {}
+	for agent_id in Catalog.agent_ids():
+		var source := Catalog.agent(agent_id)
+		var definition := source.duplicate(true)
+		definition["color"] = Color(String(source["color"]))
+		definition["ult_cost"] = int(source["ultCost"])
+		for key in SLOT_KEYS:
+			definition[key] = source["ab"][key]
+		result[agent_id] = definition
+	return result
+
+static func _grant_weapon(entity: Variant, weapon_id: String, primary: bool, temporary: bool) -> void:
+	var weapon := Weapons.make(weapon_id)
+	if weapon.is_empty():
+		return
+	if entity is Dictionary:
+		entity["primary" if primary else "secondary"] = weapon
+		entity["weapon"] = weapon
+		entity["slot"] = "primary" if primary else "secondary"
 	else:
-		match t:
-			"dash":
-				var d2: Vector3 = Vector3(dir.x, 0, dir.z).normalized()
-				ent.velocity = d2 * 16.0 + Vector3.UP * 0.5
-				if key == "e": slot["cd_until"] = now + def.get("cd", 22.0)
-			"updraft":
-				ent.velocity.y = 11.0
-			"blast_jump":
-				var d2: Vector3 = Vector3(dir.x, 0, dir.z).normalized()
-				ent.velocity = d2 * 8.0 + Vector3.UP * 7.2
-				main.explosion_fx(ent.global_position, 1.5, Color(1.0,0.7,0.3))
-			"heal":
-				var heal_t: Node = ent
-				for e in main.combatants():
-					if e != ent and e.alive and e.team == ent.team and e.hp < 60.0 \
-							and e.global_position.distance_to(ent.global_position) < 12.0:
-						if heal_t == ent or e.hp < heal_t.hp:
-							heal_t = e
-				heal_t.hp = minf(100.0, heal_t.hp + 60.0)
-				main.spawn_particles(heal_t.global_position + Vector3(0, 1.2, 0), Color(0.6, 1.0, 0.7), 14, 2.0, 0.6)
-				slot["cd_until"] = now + def.get("cd", 45.0)
-			"phoenix_ult":
-				ent.hp = 100.0
-				ent.resist_until = now + 8.0
-			"rez":
-				used = main.try_revive(ent)
-			"wall":
-				main.spawn_wall(ent.global_position, ent.yaw_angle(), 30.0)
-			"firewall":
-				main.spawn_firewall(ent, ent.global_position, dir)
-			"paranoia", "wall_flash":
-				main.cone_blind(ent, 20.0, 0.65, 1.6)
-			"stun_wave":
-				main.cone_daze(ent, 18.0, 0.72, 2.4)
-				slot["cd_until"] = now + def.get("cd", 35.0)
-			"big_stun":
-				main.cone_daze(ent, 26.0, 0.55, 3.2)
-			"quake":
-				var p: Vector3 = ent.global_position + Vector3(dir.x,0,dir.z).normalized() * 7.5
-				main.delayed_quake(ent, p)
-			"shadow_step":
-				main.teleport_forward(ent, 9.0)
-			"shadow_ult":
-				main.teleport_site(ent)
-			"smoke_sky":
-				main.smoke_site_chokes(ent)
-				slot["cd_until"] = now + def.get("cd", 20.0)
-			"orbital":
-				main.orbital_strike(ent, origin, dir)
-			"stim_beacon":
-				main.spawn_device(ent, "beacon", ent.global_position)
-			"turret":
-				main.spawn_device(ent, "turret", ent.global_position + Vector3(dir.x,0,dir.z).normalized() * 1.4)
-			"alarm_bot":
-				main.spawn_device(ent, "alarm", ent.global_position + Vector3(dir.x,0,dir.z).normalized() * 3.0)
-			"lockdown":
-				main.spawn_device(ent, "lockdown", ent.global_position)
-			"boom_bot":
-				main.spawn_boom_bot(ent, dir)
-			"drone_scan":
-				main.spawn_drone(ent, dir)
-			"toxic_wall":
-				main.toxic_wall(ent, dir)
-				slot["cd_until"] = now + def.get("cd", 32.0)
-			"toxic_dome":
-				main.toxic_dome(ent, origin, dir)
-			"reveal_all", "hunter_ult":
-				main.reveal_enemies(ent)
-				if t == "hunter_ult":
-					ent.arrow_ult = 3
-			"null_pulse":
-				main.suppress_burst(ent.global_position, 16.0, 6.0, ent)
-				ent.stim_until = now + 8.0
-			"tripwire":
-				main.spawn_device(ent, "trap", ent.global_position + Vector3(dir.x, 0, dir.z).normalized() * 6.0)
-			"cage":
-				var cp: Vector3 = ent.global_position + Vector3(dir.x, 0, dir.z).normalized() * 20.0
-				main.spawn_smoke(cp, 3.4, 8.0)
-				main.spawn_slow_zone(ent, cp, 3.4, 8.0)
-				if key == "e": slot["cd_until"] = now + def.get("cd", 30.0)
-			"devour":
-				if now - ent.last_kill_at > 6.0 or ent.hp >= 100.0:
-					used = false
-				else:
-					ent.hp = minf(100.0, ent.hp + 80.0)
-					main.spawn_particles(ent.global_position + Vector3(0, 1.2, 0), Color(0.77, 0.35, 0.82), 16, 2.0, 0.6)
-			"dismiss":
-				var dv := Vector3(ent.velocity.x, 0, ent.velocity.z)
-				if dv.length() < 2.0: dv = Vector3(dir.x, 0, dir.z)
-				dv = dv.normalized()
-				ent.velocity = dv * 18.0
-				ent.resist_until = maxf(ent.resist_until, now + 1.2)
-				main.spawn_particles(ent.global_position + Vector3(0, 1, 0), Color(0.77, 0.35, 0.82), 20, 3.0, 0.5)
-				if key == "e": slot["cd_until"] = now + def.get("cd", 26.0)
-			"empress":
-				ent.empress_until = now + 14.0
-				ent.stim_until = maxf(ent.stim_until, now + 14.0)
-				ent.hp = minf(100.0, ent.hp + 30.0)
-			"seekers":
-				var foes: Array = []
-				for e in main.combatants():
-					if e.alive and e.team != ent.team:
-						foes.append(e)
-				foes.sort_custom(func(a, b): return a.global_position.distance_to(ent.global_position) < b.global_position.distance_to(ent.global_position))
-				if foes.is_empty():
-					used = false
-				else:
-					for f in foes.slice(0, 3):
-						main.send_seeker(ent, f)
-			"knife_ult":
-				ent.knife_ult = 5
-			"rocket_ult":
-				ent.rocket_ult = 1
-			_:
-				used = false
-	if used:
-		if key == "x":
-			ent.ult_points = 0
+		if primary:
+			entity.primary = weapon
 		else:
-			slot["n"] -= 1
-	return used
+			entity.secondary = weapon
+		entity.weapon = weapon
+		entity.slot = "primary" if primary else "secondary"
+	if temporary:
+		_state(entity)["temporary_weapon"] = weapon_id
+
+static func _nearest_enemy(world: Variant, entity: Variant, maximum: float) -> Variant:
+	var best = null
+	var best_distance := maximum
+	for enemy in _enemies(world, entity):
+		var distance := _position(enemy).distance_to(_position(entity))
+		if distance < best_distance:
+			best = enemy
+			best_distance = distance
+	return best
+
+static func _nearest_ally(world: Variant, entity: Variant, maximum: float) -> Variant:
+	var best = null
+	var best_hp := INF
+	for ally in world.combatants():
+		if ally == entity or not bool(_read_value(ally, "alive", false)):
+			continue
+		if _read_value(ally, "team", null) != _read_value(entity, "team", null):
+			continue
+		if _position(ally).distance_to(_position(entity)) > maximum:
+			continue
+		var hp := float(_read_value(ally, "hp", 100.0))
+		if hp < best_hp:
+			best = ally
+			best_hp = hp
+	return best
+
+static func _enemies(world: Variant, entity: Variant) -> Array:
+	var result: Array = []
+	for combatant in world.combatants():
+		if bool(_read_value(combatant, "alive", false)) and _read_value(combatant, "team", null) != _read_value(entity, "team", null):
+			result.append(combatant)
+	return result
+
+static func _rejected(reason: String) -> Dictionary:
+	return {"ok": false, "reason": reason}
+
+static func _agent_id(entity: Variant) -> String:
+	var result := String(_read_value(entity, "agent_id", ""))
+	return result if not result.is_empty() else String(_read_value(entity, "agent", ""))
+
+static func _ability_slots(entity: Variant) -> Dictionary:
+	var slots = _read_value(entity, "ability_slots", null)
+	if slots is Dictionary:
+		return slots
+	slots = _read_value(entity, "ab", null)
+	return slots if slots is Dictionary else {}
+
+static func _state(entity: Variant) -> Dictionary:
+	var state = _read_value(entity, "ability_state", null)
+	if state is Dictionary:
+		return state
+	var created := {}
+	_write_value(entity, "ability_state", created)
+	return created
+
+static func _resources(entity: Variant) -> Dictionary:
+	var resources = _read_value(entity, "resources", null)
+	if resources is Dictionary:
+		return resources
+	var created := {}
+	_write_value(entity, "resources", created)
+	return created
+
+static func _position(entity: Variant) -> Vector3:
+	var value = _read_value(entity, "pos", null)
+	if value == null:
+		value = _read_value(entity, "global_position", Vector3.ZERO)
+	return _as_vector3(value)
+
+static func _eye_position(entity: Variant) -> Vector3:
+	if entity is Object and entity.has_method("eye_pos"):
+		return entity.eye_pos()
+	return _position(entity) + Vector3.UP * 1.55
+
+static func _aim_direction(entity: Variant) -> Vector3:
+	if entity is Object and entity.has_method("aim_dir"):
+		return entity.aim_dir()
+	return Vector3.FORWARD
+
+static func _yaw(entity: Variant) -> float:
+	if entity is Object and entity.has_method("yaw_angle"):
+		return float(entity.yaw_angle())
+	return float(_read_value(entity, "yaw", 0.0))
+
+static func _velocity(entity: Variant) -> Vector3:
+	return _as_vector3(_read_value(entity, "velocity", Vector3.ZERO))
+
+static func _set_velocity(entity: Variant, velocity: Vector3) -> void:
+	_write_value(entity, "velocity", velocity)
+
+static func _as_vector3(value: Variant) -> Vector3:
+	if value is Vector3:
+		return value
+	if value is Dictionary:
+		return Vector3(
+			float(value.get("x", 0.0)),
+			float(value.get("y", 0.0)),
+			float(value.get("z", 0.0)),
+		)
+	return Vector3.ZERO
+
+static func _read_value(entity: Variant, key: String, default: Variant = null) -> Variant:
+	if entity is Dictionary:
+		return entity.get(key, default)
+	if entity is Object and _has_property(entity, key):
+		return entity.get(key)
+	return default
+
+static func _write_value(entity: Variant, key: String, value: Variant) -> void:
+	if entity is Dictionary:
+		entity[key] = value
+	elif entity is Object and _has_property(entity, key):
+		entity.set(key, value)
+
+static func _has_property(entity: Object, key: String) -> bool:
+	for property in entity.get_property_list():
+		if String(property.get("name", "")) == key:
+			return true
+	return false

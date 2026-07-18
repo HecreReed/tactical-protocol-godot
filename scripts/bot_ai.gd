@@ -4,6 +4,7 @@ extends CharacterBody3D
 const Weapons := preload("res://scripts/weapons.gd")
 const Ab := preload("res://scripts/abilities.gd")
 const CharRig := preload("res://scripts/char_rig.gd")
+const Mechanics := preload("res://scripts/agent_mechanics.gd")
 
 const SPEED := 6.0
 const CAT_SPEED := { "melee": 1.12, "pistol": 1.0, "smg": 0.96, "rifle": 0.9, "sniper": 0.84, "heavy": 0.82, "shotgun": 0.96 }
@@ -11,9 +12,11 @@ const GRAV := 18.0
 
 var main: Node3D
 var team := "enemy"
-var agent_id := "fengying"
+var agent_id := "astra"
 var agent_name := "Bot"
 var ability_slots: Dictionary = {}
+var ability_state: Dictionary = {}
+var resources: Dictionary = {}
 var ult_points := 0
 var hp := 100.0
 var alive := true
@@ -73,6 +76,9 @@ var assault_role := "entry"
 var loot_until := 0.0
 var money := 800
 var armor := 0
+var armor_max := 0
+var heal_queue := 0.0
+var speed_mul := 1.0
 var bought_round := -1
 var smoke_idx := 0
 
@@ -82,6 +88,7 @@ func setup(m: Node3D, t: String, aid: String) -> void:
 	agent_id = aid
 	agent_name = Ab.AGENTS[aid]["name"]
 	ability_slots = Ab.make_slots(aid)
+	Mechanics.init_agent_state(self)
 	collision_layer = 16
 	collision_mask = 1 | 8
 	var color: Color = Ab.AGENTS[aid]["color"]
@@ -250,7 +257,7 @@ func _combat_abilities(now: float) -> void:
 	if hp < 35 and ult_points >= Ab.AGENTS[agent_id]["ult_cost"]:
 		var xt: String = Ab.AGENTS[agent_id]["x"]["type"]
 		if xt in ["phoenix_ult", "knife_ult", "null_pulse", "big_stun"]:
-			Ab.cast(main, self, "x")
+			Ab.cast_for_bot(main, self, "x")
 
 func _util_abilities(now: float) -> void:
 	if used_util or not main.can_fight():
@@ -259,12 +266,12 @@ func _util_abilities(now: float) -> void:
 	# 进攻执行：烟/闪开路；防守就位：装置布防
 	if side == "atk" and state == "execute":
 		used_util = true
-		Ab.cast(main, self, "e")
-		Ab.cast(main, self, "q")
+		Ab.cast_for_bot(main, self, "e")
+		Ab.cast_for_bot(main, self, "q")
 	elif side == "def" and state == "post" and nav_finished():
 		used_util = true
-		Ab.cast(main, self, "e")
-		Ab.cast(main, self, "c")
+		Ab.cast_for_bot(main, self, "e")
+		Ab.cast_for_bot(main, self, "c")
 
 func _navigate(dt: float, now: float) -> void:
 	if channel != "":
@@ -508,6 +515,7 @@ func revive_reset(pos: Vector3) -> void:
 	flash_until = 0.0
 	daze_until = 0.0
 	suppressed_until = 0.0
+	Mechanics.on_round_start(self)
 	weapon["ammo"] = weapon["def"]["mag"]
 	weapon["reserve"] = weapon["def"]["res"]
 	for k in ["c", "q", "e"]:

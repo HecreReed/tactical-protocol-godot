@@ -3,6 +3,7 @@ extends SceneTree
 const Catalog := preload("res://scripts/agent_catalog.gd")
 const Runtime := preload("res://scripts/ability_runtime.gd")
 const Mechanics := preload("res://scripts/agent_mechanics.gd")
+const Abilities := preload("res://scripts/abilities.gd")
 
 var failures := 0
 var checks := 0
@@ -12,6 +13,7 @@ func _init() -> void:
 	_test_core_runtime()
 	_test_utility_runtime()
 	_test_agent_mechanics()
+	_test_cast_contracts()
 	if failures == 0:
 		print("PASS: %d checks" % checks)
 	else:
@@ -293,6 +295,104 @@ func _test_agent_mechanics() -> void:
 	assert_eq(neon["ability_slots"]["e"]["n"], 1, "round reset restores starting charge")
 	assert_eq(neon["ability_slots"]["e"]["cd_until"], 0.0, "round reset clears cooldown")
 
+func _test_cast_contracts() -> void:
+	var registered_types := {}
+	for definition in Catalog.all_abilities():
+		var type := String(definition["type"])
+		registered_types[type] = true
+		assert_true(Abilities.has_handler(type), "registered handler: %s" % type)
+	assert_eq(Abilities.handler_types().size(), registered_types.size(), "no hidden handler fallback")
+
+	var slots := Abilities.make_slots("astra")
+	assert_eq(slots["c"]["n"], 1, "catalog starting charge")
+	assert_eq(slots["e"]["n"], 2, "catalog multi-charge signature")
+	assert_eq(slots["x"]["n"], 0, "ultimate starts uncharged")
+
+	var actor := _cast_actor("jett")
+	var failed_phase := Abilities.start_cast(actor, "c", 10.0, false, "buy")
+	assert_false(failed_phase["ok"], "buy phase cast is rejected")
+	actor["alive"] = false
+	assert_false(Abilities.start_cast(actor, "c", 10.0, true)["ok"], "dead cast is rejected")
+	actor["alive"] = true
+	actor["channel"] = "plant"
+	assert_false(Abilities.start_cast(actor, "c", 10.0, true)["ok"], "channeling cast is rejected")
+	actor["channel"] = ""
+	actor["suppressed_until"] = 11.0
+	assert_false(Abilities.start_cast(actor, "c", 10.0, true)["ok"], "suppressed cast is rejected")
+	actor["suppressed_until"] = 0.0
+	actor["ability_slots"]["c"]["n"] = 0
+	assert_false(Abilities.start_cast(actor, "c", 10.0, true)["ok"], "empty slot is rejected")
+	actor["ability_slots"]["c"]["n"] = 1
+	actor["ability_slots"]["c"]["cd_until"] = 11.0
+	assert_false(Abilities.start_cast(actor, "c", 10.0, true)["ok"], "cooldown is rejected")
+	actor["ability_slots"]["c"]["cd_until"] = 0.0
+
+	var failed_cast := Abilities.start_cast(actor, "c", 10.0, true)
+	assert_true(failed_cast["ok"], "valid cast prepares")
+	assert_false(Abilities.confirm_cast(
+		null, actor, failed_cast, false, func(_world, _entity, _key, _definition, _alt): return false,
+	), "failed handler rejects cast")
+	assert_eq(actor["ability_slots"]["c"]["n"], 1, "failed handler spends no charge")
+
+	var alternate := [false]
+	var successful_cast := Abilities.start_cast(actor, "c", 10.0, true)
+	assert_true(Abilities.confirm_cast(
+		null, actor, successful_cast, true,
+		func(_world, _entity, _key, _definition, alt):
+			alternate[0] = alt
+			return true,
+	), "successful handler commits cast")
+	assert_true(alternate[0], "alternate fire reaches handler")
+	assert_eq(actor["ability_slots"]["c"]["n"], 0, "successful handler spends one charge")
+
+	actor = _cast_actor("jett")
+	actor["ult_points"] = 7
+	assert_false(Abilities.start_cast(actor, "x", 20.0, true)["ok"], "insufficient ultimate points")
+	actor["ult_points"] = 8
+	var ultimate := Abilities.start_cast(actor, "x", 20.0, true)
+	assert_true(Abilities.confirm_cast(
+		null, actor, ultimate, false, func(_w, _e, _k, _d, _a): return true,
+	), "ultimate commits")
+	assert_eq(actor["ult_points"], 0, "ultimate points are spent on success")
+
+	actor = _cast_actor("jett")
+	actor["ability_slots"]["e"]["n"] = 0
+	Mechanics.prime_jett_dash(actor, 30.0)
+	var recast := Abilities.start_cast(actor, "e", 31.0, true)
+	assert_true(recast["ok"], "live Jett recast bypasses empty charge")
+	assert_true(recast["recast"], "cast is marked as recast")
+	assert_true(Abilities.confirm_cast(
+		null, actor, recast, false, func(_w, _e, _k, _d, _a): return true,
+	), "recast confirms")
+	assert_eq(actor["ability_slots"]["e"]["n"], 0, "recast spends no second charge")
+
+	actor = _cast_actor("omen")
+	var canceled := Abilities.start_cast(actor, "c", 40.0, true)
+	Abilities.cancel_cast(canceled)
+	assert_false(Abilities.confirm_cast(
+		null, actor, canceled, false, func(_w, _e, _k, _d, _a): return true,
+	), "canceled cast cannot confirm")
+	assert_eq(actor["ability_slots"]["c"]["n"], 1, "cancel keeps charge")
+
+	var clove := _cast_actor("clove")
+	clove["alive"] = false
+	clove["ability_state"]["clove_death_until"] = 60.0
+	assert_true(Abilities.start_cast(clove, "e", 50.0, true)["ok"], "Clove Ruse is allowed post-death")
+	assert_false(Abilities.start_cast(clove, "q", 50.0, true)["ok"], "other Clove casts stay blocked post-death")
+
+	actor = _cast_actor("sova")
+	actor["ability_slots"]["q"]["n"] = 2
+	actor["suppressed_until"] = 100.0
+	assert_false(Abilities.cast_for_bot(
+		null, actor, "q", 50.0, func(_w, _e, _k, _d, _a): return true,
+	), "Bot cast uses suppression validator")
+	assert_eq(actor["ability_slots"]["q"]["n"], 2, "rejected Bot cast keeps charge")
+	actor["suppressed_until"] = 0.0
+	assert_true(Abilities.cast_for_bot(
+		null, actor, "q", 50.0, func(_w, _e, _k, _d, _a): return true,
+	), "Bot cast uses common commit path")
+	assert_eq(actor["ability_slots"]["q"]["n"], 1, "successful Bot cast spends one charge")
+
 func _actor(agent_id: String) -> Dictionary:
 	return {
 		"agent": agent_id,
@@ -312,6 +412,14 @@ func _actor(agent_id: String) -> Dictionary:
 		"stim_until": 0.0,
 		"speed_mul": 1.0,
 	}
+
+func _cast_actor(agent_id: String) -> Dictionary:
+	var actor := _actor(agent_id)
+	actor["agent_id"] = agent_id
+	actor["ability_slots"] = Abilities.make_slots(agent_id)
+	actor["ult_points"] = 0
+	actor["suppressed_until"] = 0.0
+	return actor
 
 func assert_true(value: bool, label: String) -> void:
 	checks += 1
