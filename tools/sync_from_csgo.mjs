@@ -29,6 +29,32 @@ const { MAPS, WORLD } = await import(pathToFileURL(resolve(csgoDir, 'src/mapData
 const slots = ['c', 'q', 'e', 'x'];
 const colorHex = (color) => `#${color.toString(16).padStart(6, '0')}`;
 const mediaPath = (id, filename) => `res://assets/agents/${id}/${filename}`;
+const mapPresentation = {
+  yiji: ['temple', '#bfb8a8'], santa: ['city', '#c4bfae'],
+  liexia: ['mountain', '#b0a898'], tiangang: ['harbor', '#a8b4bc'],
+  xuefeng: ['mountain', '#e2e8ee'], rongcheng: ['city', '#a89890'],
+  gumiao: ['temple', '#cabd9e'], huanjie: ['city', '#9aa0a8'],
+  sixiang: ['temple', '#b8b0a0'], chongqing: ['mountain', '#b7a894'],
+  tianshu: ['city', '#a9b0bc'],
+};
+
+const normalizeMap = (source) => {
+  const { sky, roomRects: _roomRects, ...map } = source;
+  const presentation = mapPresentation[source.id];
+  if (!presentation) throw new Error(`missing Godot presentation metadata for map ${source.id}`);
+  const [theme, ground] = presentation;
+  return {
+    ...map,
+    theme,
+    wallTone: colorHex(source.wallTone),
+    accent: colorHex(source.accent),
+    ground,
+    fog: colorHex(sky.fog),
+    fogFar: sky.fogFar,
+    skyTop: sky.top,
+    skyBot: sky.bot,
+  };
+};
 
 const agents = AGENT_LIST.map((id) => {
   const source = AGENTS[id];
@@ -88,7 +114,7 @@ const catalog = {
   maps: MAPS.map((map) => map.id),
   summary: { agents: 29, abilities: 116, media: 145, maps: 11 },
 };
-const maps = { world: WORLD, maps: MAPS };
+const maps = { world: WORLD, maps: MAPS.map(normalizeMap) };
 
 await mkdir(resolve(repoRoot, 'data'), { recursive: true });
 await writeFile(resolve(repoRoot, 'data/agents.json'), `${JSON.stringify(catalog, null, 2)}\n`);

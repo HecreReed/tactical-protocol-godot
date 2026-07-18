@@ -24,6 +24,29 @@ const { MAPS: upstreamMaps, WORLD: upstreamWorld } = await import(
 const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'));
 const colorHex = (color) => `#${color.toString(16).padStart(6, '0')}`;
 const expectedAssetPath = (id, filename) => `res://assets/agents/${id}/${filename}`;
+const mapPresentation = {
+  yiji: ['temple', '#bfb8a8'], santa: ['city', '#c4bfae'],
+  liexia: ['mountain', '#b0a898'], tiangang: ['harbor', '#a8b4bc'],
+  xuefeng: ['mountain', '#e2e8ee'], rongcheng: ['city', '#a89890'],
+  gumiao: ['temple', '#cabd9e'], huanjie: ['city', '#9aa0a8'],
+  sixiang: ['temple', '#b8b0a0'], chongqing: ['mountain', '#b7a894'],
+  tianshu: ['city', '#a9b0bc'],
+};
+const normalizeMap = (source) => {
+  const { sky, roomRects: _roomRects, ...map } = source;
+  const [theme, ground] = mapPresentation[source.id];
+  return {
+    ...map,
+    theme,
+    wallTone: colorHex(source.wallTone),
+    accent: colorHex(source.accent),
+    ground,
+    fog: colorHex(sky.fog),
+    fogFar: sky.fogFar,
+    skyTop: sky.top,
+    skyBot: sky.bot,
+  };
+};
 
 test('generated Godot catalog matches the current csgo source', () => {
   const generated = readJson(resolve(repoRoot, 'data/agents.json'));
@@ -83,5 +106,5 @@ test('generated Godot maps match all current upstream maps', () => {
   assert.equal(generated.world, upstreamWorld);
   assert.equal(generated.maps.length, 11);
   assert.deepEqual(generated.maps.map((map) => map.id), upstreamMaps.map((map) => map.id));
-  assert.deepEqual(generated.maps, upstreamMaps);
+  assert.deepEqual(generated.maps, upstreamMaps.map(normalizeMap));
 });
