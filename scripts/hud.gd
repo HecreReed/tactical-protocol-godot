@@ -846,7 +846,7 @@ func _process(dt: float) -> void:
 		ammo_num.text = "%d / %d" % [w["ammo"], w["reserve"]]
 		weap_name.text = w["def"]["name"].to_upper() + ("  换弹中…" if w["reload_end"] > 0 else "")
 	for i in range(slot_ls.size()):
-		var on: bool = (i == 0 and p.slot == "primary") or (i == 1 and p.slot == "secondary")
+		var on: bool = (i == 0 and p.slot == "primary") or (i == 1 and p.slot == "secondary") or (i == 2 and p.slot == "knife")
 		(slot_ls[i] as Label).add_theme_color_override("font_color", C_WHITE if on else C_DIM)
 	(slot_ls[0] as Label).modulate.a = 1.0 if p.primary.size() > 0 else 0.35
 	_refresh_abilities(p)

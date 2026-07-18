@@ -5,6 +5,7 @@ const Weapons := preload("res://scripts/weapons.gd")
 const Ab := preload("res://scripts/abilities.gd")
 
 const SPEED := 6.0
+const CAT_SPEED := { "melee": 1.12, "pistol": 1.0, "smg": 0.96, "rifle": 0.9, "sniper": 0.84, "heavy": 0.82, "shotgun": 0.96 }
 const JUMP_VEL := 6.2
 const GRAV := 18.0
 const SENS := 0.0022
@@ -278,8 +279,14 @@ func _equip_ability(k: String) -> void:
 		return
 	cast_mode = k
 
+func _ads_active() -> bool:
+	# 近战/手持技能/大招武器不能瞄准
+	if weapon["def"]["cat"] == "melee" or cast_mode != "" or knife_ult > 0 or rocket_ult > 0 or arrow_ult > 0:
+		return false
+	return ads
+
 func _scoped() -> bool:
-	return weapon["def"].get("scope", false) and ads
+	return weapon["def"].get("scope", false) and _ads_active()
 
 func _physics_process(dt: float) -> void:
 	if not alive:
@@ -311,7 +318,7 @@ func _physics_process(dt: float) -> void:
 	if Input.is_action_pressed("move_right"): dir += r
 	dir.y = 0
 	dir = dir.normalized()
-	var spd := SPEED * (0.52 if walk else 1.0) * (0.55 if crouching else 1.0) * (0.75 if ads else 1.0)
+	var spd: float = SPEED * CAT_SPEED.get(weapon["def"]["cat"], 1.0) * (0.52 if walk else 1.0) * (0.55 if crouching else 1.0) * (0.75 if _ads_active() else 1.0)
 	if now < slow_until: spd *= 0.45
 	if now < daze_until: spd *= 0.6
 	if now < stim_until: spd *= 1.12
@@ -330,13 +337,13 @@ func _physics_process(dt: float) -> void:
 			main.sfx.play("step")
 
 	cam.position.y = 1.15 if crouching else 1.55
-	cam.fov = lerpf(cam.fov, (30.0 if _scoped() else (fov_base * 0.82 if ads else fov_base)), dt * 14.0)
+	cam.fov = lerpf(cam.fov, (30.0 if _scoped() else (fov_base * 0.82 if _ads_active() else fov_base)), dt * 14.0)
 	# 视模摆动/后座/换弹动画
 	bob_t += Vector2(velocity.x, velocity.z).length() * dt * 1.8
 	vm_kick = move_toward(vm_kick, 0.0, dt * 0.6)
-	var ads := _scoped()
-	var tx := 0.0 if ads else 0.18
-	var ty := (-0.12 if ads else -0.16) + sin(bob_t) * 0.004
+	var ads_on := _ads_active()
+	var tx := 0.0 if ads_on else 0.18
+	var ty := (-0.12 if ads_on else -0.16) + sin(bob_t) * 0.004
 	vm_group.position = vm_group.position.lerp(Vector3(tx, ty, -0.35 + vm_kick), minf(1.0, dt * 18.0))
 	vm_group.visible = not (ads and weapon["def"].get("scope", false))
 	var rl: bool = weapon["reload_end"] > 0
@@ -470,7 +477,7 @@ func _shoot(now: float) -> void:
 	if crouching: spread *= 0.8
 	if _scoped(): spread *= 0.25
 	if now < daze_until: spread *= 1.8
-	if ads and not _scoped(): spread *= 0.55
+	if _ads_active() and not _scoped(): spread *= 0.55
 	var pellets: int = weapon["def"].get("pellets", 1)
 	for i in range(pellets):
 		var d := aim_dir()
@@ -479,7 +486,7 @@ func _shoot(now: float) -> void:
 	bloom += 0.5
 	recoil += 1.4
 	vm_kick += 0.02
-	pitch = clampf(pitch + 0.006 * (0.5 if ads else 1.0), -1.55, 1.55)
+	pitch = clampf(pitch + 0.006 * (0.5 if _ads_active() else 1.0), -1.55, 1.55)
 	cam.rotation.x = pitch
 	main.sfx.shot(weapon["def"]["cat"])
 	main.spawn_particles(eye_pos() + aim_dir() * 0.9, Color(1.0, 0.85, 0.5), 3, 1.5, 0.1)
