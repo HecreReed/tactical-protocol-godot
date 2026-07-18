@@ -103,16 +103,23 @@ func _build_menu() -> void:
 	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.add_child(center)
 	var v := VBoxContainer.new()
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.custom_minimum_size = Vector2(320, 0)
 	v.add_theme_constant_override("separation", 10)
 	center.add_child(v)
+	var resize_menu := func() -> void:
+		var viewport_width := get_viewport().get_visible_rect().size.x
+		v.custom_minimum_size.x = clampf(viewport_width - 32.0, 320.0, 1120.0)
+	get_viewport().size_changed.connect(resize_menu)
+	resize_menu.call()
 
 	# 标题：TACTICAL PROTOCOL（PROTOCOL 红色）
 	var th := HBoxContainer.new()
 	th.alignment = BoxContainer.ALIGNMENT_CENTER
-	th.add_theme_constant_override("separation", 14)
+	th.add_theme_constant_override("separation", 8)
 	v.add_child(th)
-	_mlbl(th, 34, MC_WHITE, "TACTICAL")
-	_mlbl(th, 34, MC_RED, "PROTOCOL")
+	_mlbl(th, 28, MC_WHITE, "TACTICAL")
+	_mlbl(th, 28, MC_RED, "PROTOCOL")
 	_sub_label = _mlbl(v, 13, MC_DIM, "第 1 步 · 选择地图与难度")
 
 	var data: Dictionary = MapBuilderScript.load_all()
@@ -129,9 +136,9 @@ func _build_menu() -> void:
 	v.add_child(_step1)
 	var cards := HFlowContainer.new()
 	cards.alignment = FlowContainer.ALIGNMENT_CENTER
+	cards.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	cards.add_theme_constant_override("h_separation", 10)
 	cards.add_theme_constant_override("v_separation", 10)
-	cards.custom_minimum_size = Vector2(880, 0)
 	_step1.add_child(cards)
 	sel_map_id = _menu_maps[0]["id"]
 	for m in _menu_maps:
@@ -152,8 +159,9 @@ func _build_menu() -> void:
 		_map_cards.append({ "node": card, "id": m["id"] })
 	_refresh_map_cards()
 
-	var diffs := HBoxContainer.new()
-	diffs.alignment = BoxContainer.ALIGNMENT_CENTER
+	var diffs := HFlowContainer.new()
+	diffs.alignment = FlowContainer.ALIGNMENT_CENTER
+	diffs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	diffs.add_theme_constant_override("separation", 8)
 	_step1.add_child(diffs)
 	for d in [["新手", 0.55], ["常规", 0.8], ["困难", 1.0], ["天梯", 1.25]]:
@@ -170,8 +178,9 @@ func _build_menu() -> void:
 		_diff_btns.append({ "node": b, "diff": d[1] })
 	_refresh_diff_btns()
 
-	var btn_row := HBoxContainer.new()
-	btn_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	var btn_row := HFlowContainer.new()
+	btn_row.alignment = FlowContainer.ALIGNMENT_CENTER
+	btn_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn_row.add_theme_constant_override("separation", 12)
 	_step1.add_child(btn_row)
 	var next_btn := Button.new()
@@ -201,9 +210,9 @@ func _build_menu() -> void:
 	v.add_child(_step2)
 	var acards := HFlowContainer.new()
 	acards.alignment = FlowContainer.ALIGNMENT_CENTER
+	acards.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	acards.add_theme_constant_override("h_separation", 12)
 	acards.add_theme_constant_override("v_separation", 12)
-	acards.custom_minimum_size = Vector2(1020, 0)
 	_step2.add_child(acards)
 	for aid in Ab.AGENTS.keys():
 		acards.add_child(_agent_card(aid))
@@ -219,31 +228,51 @@ func _build_menu() -> void:
 	back_row.add_child(back)
 	_step2.add_child(back_row)
 
-	var help := _mlbl(v, 12, MC_DIM, "WASD 移动 · Shift 静步 · Ctrl 蹲 · 左键开火 · 右键瞄准 · R 换弹 · B 购买 · C/Q/E 技能 · X 大招 · F 安放/拆除/拾取 · Tab 计分板")
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func _agent_card(aid: String) -> PanelContainer:
 	var a: Dictionary = Ab.AGENTS[aid]
 	var card := PanelContainer.new()
-	card.custom_minimum_size = Vector2(158, 0)
+	card.custom_minimum_size = Vector2(176, 0)
+	card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	card.add_theme_stylebox_override("panel", _card_sb(MC_PANEL, MC_BORDER))
 	var cv := VBoxContainer.new()
 	cv.add_theme_constant_override("separation", 4)
 	card.add_child(cv)
+	var portrait := TextureRect.new()
+	portrait.texture = load(String(a["portrait"]))
+	portrait.custom_minimum_size = Vector2(152, 112)
+	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cv.add_child(portrait)
 	var swatch := ColorRect.new()
 	swatch.color = a["color"]
-	swatch.custom_minimum_size = Vector2(0, 6)
+	swatch.custom_minimum_size = Vector2(0, 4)
 	cv.add_child(swatch)
 	_mlbl(cv, 18, MC_WHITE, a["name"])
-	var role := _mlbl(cv, 11, MC_GOLD, "%s · %s" % [a.get("role", ""), a.get("desc", "")])
+	var role := _mlbl(cv, 11, MC_GOLD, String(a.get("role", "")))
 	role.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	role.custom_minimum_size = Vector2(134, 0)
+	role.custom_minimum_size = Vector2(152, 0)
 	for k in ["c", "q", "e", "x"]:
 		var ab: Dictionary = a[k]
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 6)
+		cv.add_child(row)
+		var icon := TextureRect.new()
+		icon.texture = load(String(ab["icon"]))
+		icon.custom_minimum_size = Vector2(22, 22)
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(icon)
 		var suffix := ""
-		if k == "e": suffix = "  免费"
-		elif k == "x": suffix = "  %d点" % a["ult_cost"]
-		var li := _mlbl(cv, 11, MC_DIM, "%s  %s%s" % [k.to_upper(), ab["name"], suffix], false)
+		if bool(ab.get("free", false)) and k != "x": suffix = " · 免费"
+		elif k == "x": suffix = " · %d点" % a["ult_cost"]
+		var li := _mlbl(row, 10, MC_DIM, "%s  %s%s" % [k.to_upper(), ab["name"], suffix], false)
+		li.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		li.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		li.tooltip_text = String(ab["name"])
 	card.gui_input.connect(func(ev: InputEvent):
 		if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
 			_start_game(sel_map_id, aid, false))

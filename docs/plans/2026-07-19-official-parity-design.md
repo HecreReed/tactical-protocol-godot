@@ -4,7 +4,7 @@ Date: 2026-07-19
 
 ## Goal
 
-Make the Godot project reproduce the current `../csgo` game contract while retaining Godot-specific physical presentation such as rigid-body grenades and weapon drops, particles, ragdolls, and native collision. The parity target is the current 29-agent official roster, 116 standard ability slots, 11 maps, weapons, round rules, economy, AI behavior, HUD, and local official portrait/icon media.
+Make the Godot project reproduce the current `../csgo` game contract while retaining Godot-specific physical presentation such as rigid-body grenades and weapon drops, particles, ragdolls, and native collision. The parity target is the current 29-agent official roster, 116 standard ability slots, 16 maps, weapons, round rules, economy, AI behavior, HUD, and local official portrait/icon media.
 
 The Godot project will replace its fictional Chinese agent roster with the official names and assets already stored in `../csgo`. JavaScript remains a read-only upstream source during development; the shipped Godot game does not execute or fetch JavaScript at runtime.
 
@@ -44,12 +44,12 @@ Round end, death, halftime, match end, or control interruption deterministically
 
 - Official 29-agent names, roles, portraits, ability names, ability icons, charge/cost/cooldown data, and ultimate costs.
 - All 116 slots have explicit Godot dispatch and preserve the upstream gameplay decision, including alternate fire, recasts, recalls, destructible utility, post-death casts, controlled units, agent resources, kill contracts, anchors, and temporary weapons.
-- All 11 current maps, weapons, economy, spike rules, side swap, sudden death, bot intents, sound information, HUD, selection, buy menu, scoreboard, minimap, observer mode, and settings.
+- All 16 current maps, weapons, economy, spike rules, side swap, sudden death, bot intents, sound information, HUD, selection, buy menu, scoreboard, minimap, observer mode, and settings.
 - Godot-specific rigid bodies, impulses, particles, ragdolls, native 3D navigation, and physical effects remain when they do not change the upstream gameplay contract.
 
 ## Testing
 
-`tests/parity_contract.mjs` compares the upstream and generated catalogs and maps. It requires exactly 29 agents, 116 unique ability slots, matching gameplay metadata, complete local media, 11 matching maps, and one registered Godot handler for every ability type.
+`tests/parity_contract.mjs` compares the upstream and generated catalogs and maps. It requires exactly 29 agents, 116 unique ability slots, matching gameplay metadata, complete local media, 16 matching maps, and one registered Godot handler for every ability type.
 
 `tests/run_tests.gd` runs headlessly and exercises charge commit behavior, invalid casts, recasts, resources, kill/death hooks, destructible utility, control handoff, event cleanup, and representative high-risk kits including Jett, Phoenix, Sova, Viper, KAY/O, Clove, Gekko, Reyna, Neon, Chamber, Astra, and Yoru.
 

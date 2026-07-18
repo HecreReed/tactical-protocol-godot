@@ -4,7 +4,6 @@ extends CanvasLayer
 
 const Weapons := preload("res://scripts/weapons.gd")
 const Ab := preload("res://scripts/abilities.gd")
-const Icons := preload("res://scripts/icons.gd")
 
 const C_RED := Color8(0xff, 0x46, 0x55)
 const C_TEAL := Color8(0x39, 0xd0, 0xc9)
@@ -36,10 +35,13 @@ var hp_bar: ColorRect
 var armor_bar: ColorRect
 var money_l: Label
 var ult_l: Label
+var resource_l: Label
+var ability_state_l: Label
 var ammo_num: Label
 var weap_name: Label
 var slot_ls: Array = []
 var ability_box: HBoxContainer
+var ability_meta: VBoxContainer
 var banner_big: Label
 var banner_sub: Label
 var spec_l: Label
@@ -255,6 +257,16 @@ func setup(m: Node3D) -> void:
 	ability_box.position = Vector2(-130, -80)
 	ability_box.add_theme_constant_override("separation", 10)
 	add_child(ability_box)
+	ability_meta = VBoxContainer.new()
+	ability_meta.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	ability_meta.position = Vector2(-220, -134)
+	ability_meta.custom_minimum_size = Vector2(440, 0)
+	add_child(ability_meta)
+	resource_l = _lbl(ability_meta, 12, C_TEAL)
+	resource_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ability_state_l = _lbl(ability_meta, 12, C_GOLD)
+	ability_state_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	player_panels.append(ability_meta)
 
 	# ---- 横幅 / 观战提示 ----
 	var bv := VBoxContainer.new()
@@ -774,10 +786,16 @@ func _draw_minimap(c: Control) -> void:
 var _ab_cache := ""
 func _refresh_abilities(p) -> void:
 	var a: Dictionary = Ab.AGENTS[p.agent_id]
-	var sig := ""
+	var now: float = float(main.now())
+	var sig := "%s|%s|%s|%s|%d" % [
+		p.agent_id, str(p.resources), str(p.ability_state), p.cast_mode, int(now),
+	]
 	for k in ["c", "q", "e"]:
-		sig += "%s%d" % [k, p.ability_slots[k]["n"]]
+		var slot: Dictionary = p.ability_slots[k]
+		sig += "|%s:%d:%.2f" % [k, slot["n"], slot["cd_until"]]
 	sig += "x%d" % p.ult_points
+	var control_mode = main.control_state.get("control_mode")
+	sig += "|control:%s|alive:%s" % [str(control_mode), str(p.alive)]
 	if sig == _ab_cache:
 		return
 	_ab_cache = sig
@@ -785,11 +803,24 @@ func _refresh_abilities(p) -> void:
 		c.queue_free()
 	for k in ["c", "q", "e"]:
 		var sl: Dictionary = p.ability_slots[k]
-		ability_box.add_child(_ab_square(k.to_upper(), sl["def"]["type"], str(sl["n"]), sl["n"] <= 0, false))
+		var cooldown_left := maxf(0.0, float(sl["cd_until"]) - now)
+		var recast_ready := _has_recast(p.ability_state, String(sl["def"]["type"]), now)
+		ability_box.add_child(_ab_square(
+			k.to_upper(), sl, str(sl["n"]),
+			(sl["n"] <= 0 or cooldown_left > 0.0) and not recast_ready,
+			false, recast_ready, cooldown_left,
+		))
 	var ult_ready: bool = p.ult_points >= a["ult_cost"]
-	ability_box.add_child(_ab_square("X", a["x"]["type"], "%d/%d" % [p.ult_points, a["ult_cost"]], false, true, ult_ready))
+	var ult_slot: Dictionary = p.ability_slots["x"]
+	ability_box.add_child(_ab_square(
+		"X", ult_slot, "%d/%d" % [p.ult_points, a["ult_cost"]],
+		not ult_ready, true, ult_ready,
+		maxf(0.0, float(ult_slot["cd_until"]) - now),
+	))
+	resource_l.text = _resource_text(p)
+	ability_state_l.text = _ability_state_text(p, now)
 
-func _ab_square(key: String, ab_type: String, n: String, empty: bool, is_ult: bool, ready: bool = false) -> PanelContainer:
+func _ab_square(key: String, sl: Dictionary, n: String, empty: bool, is_ult: bool, ready: bool = false, cooldown_left: float = 0.0) -> PanelContainer:
 	var sq := PanelContainer.new()
 	var border := C_GOLD if is_ult else (C_TEAL if ready else Color8(0x2b, 0x3b, 0x47))
 	sq.add_theme_stylebox_override("panel", _sb(C_PANEL, border, 1))
@@ -799,7 +830,7 @@ func _ab_square(key: String, ab_type: String, n: String, empty: bool, is_ult: bo
 	var overlay := Control.new()
 	sq.add_child(overlay)
 	var icon := TextureRect.new()
-	icon.texture = Icons.tex(ab_type, C_GOLD if is_ult else (C_TEAL if ready else C_WHITE), 54)
+	icon.texture = load(String(sl["def"]["icon"]))
 	icon.custom_minimum_size = Vector2(27, 27)
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -822,7 +853,68 @@ func _ab_square(key: String, ab_type: String, n: String, empty: bool, is_ult: bo
 	cnt.custom_minimum_size = Vector2(26, 0)
 	cnt.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	overlay.add_child(cnt)
+	if cooldown_left > 0.0:
+		var cooldown := Label.new()
+		cooldown.text = "%ds" % int(ceil(cooldown_left))
+		cooldown.add_theme_font_size_override("font_size", 16)
+		cooldown.add_theme_color_override("font_color", C_WHITE)
+		cooldown.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+		cooldown.add_theme_constant_override("outline_size", 5)
+		cooldown.set_anchors_preset(Control.PRESET_CENTER)
+		cooldown.position = Vector2(-18, -12)
+		cooldown.custom_minimum_size = Vector2(36, 24)
+		cooldown.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		overlay.add_child(cooldown)
 	return sq
+
+func _has_recast(ability_state: Dictionary, ability_type: String, now: float) -> bool:
+	var state_key: String = String({
+		"jettTailwind": "jett_dash",
+		"razeBlastPack": "blast_pack",
+		"toxicSmoke": "toxicSmoke",
+		"toxicWall": "toxicWall",
+		"cypherCage": "cypher_cage",
+		"chamberRendezvous": "rendezvous",
+		"harborCove": "harbor_cove",
+		"vetoCrosscut": "veto_anchor",
+		"waylayRefract": "waylay_anchor",
+		"yoruGatecrash": "yoru_anchor",
+	}.get(ability_type, ""))
+	if state_key.is_empty() or not ability_state.has(state_key):
+		return false
+	var state = ability_state[state_key]
+	return not state is Dictionary or float(state.get("until", INF)) >= now
+
+func _resource_text(p) -> String:
+	var resources: Dictionary = p.resources
+	match p.agent_id:
+		"astra": return "星体 %d/4" % int(resources.get("stars", 0))
+		"viper": return "毒素 %d/100" % int(round(float(resources.get("fuel", 0.0))))
+		"neon": return "能量 %d/100 · 滑铲 %d" % [
+			int(round(float(resources.get("energy", 0.0)))), int(resources.get("slide_charges", 0)),
+		]
+		"skye": return "愈生之光 %d/100" % int(round(float(resources.get("regrowth", 0.0))))
+		"reyna": return "灵魂球 %d" % (resources.get("soul_orbs", []) as Array).size()
+		"raze": return "彩弹充能 %d/2" % int(resources.get("paint_kills", 0))
+		"gekko": return "可拾取技能 %d" % (resources.get("globules", {}) as Dictionary).size()
+	return ""
+
+func _ability_state_text(p, now: float) -> String:
+	var states: Array[String] = []
+	if p.cast_mode != "":
+		states.append("%s 装备中" % String(p.cast_mode).to_upper())
+	for key in ["c", "q", "e", "x"]:
+		var sl: Dictionary = p.ability_slots[key]
+		if _has_recast(p.ability_state, String(sl["def"]["type"]), now):
+			states.append("%s 可重施" % String(key).to_upper())
+	var control_mode = main.control_state.get("control_mode")
+	if control_mode != null:
+		states.append("控制单位中")
+	if p.agent_id == "clove" and not p.alive:
+		var afterlife_left := maxf(0.0, float(p.ability_state.get("clove_death_until", 0.0)) - now)
+		if afterlife_left > 0.0:
+			states.append("死后施法 %ds" % int(ceil(afterlife_left)))
+	return " · ".join(states)
 
 # ---------------- 每帧 ----------------
 func _process(dt: float) -> void:
@@ -889,7 +981,8 @@ func _process(dt: float) -> void:
 	if not p.alive and p.spectating != null and is_instance_valid(p.spectating):
 		spec_l.text = "观战中 · %s（左键切换）" % p.spectating.agent_name
 	elif not p.alive:
-		spec_l.text = "阵亡 — 等待回合结束"
+		var clove_left := maxf(0.0, float(p.ability_state.get("clove_death_until", 0.0)) - main.now())
+		spec_l.text = "Clove 死后施法 · %ds" % int(ceil(clove_left)) if p.agent_id == "clove" and clove_left > 0.0 else "阵亡 — 等待回合结束"
 	else:
 		spec_l.text = ""
 	# 交互提示：携带 SPIKE / 安放 / 拆除（复刻网页版 interactTip）

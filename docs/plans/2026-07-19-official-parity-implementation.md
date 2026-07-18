@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Replace the Godot project's fictional 14-agent layer with the current `../csgo` 29-agent official catalog and reproduce its 116 ability, 11-map, combat, AI, HUD, and round contracts while preserving Godot-native physics effects.
+**Goal:** Replace the Godot project's fictional 14-agent layer with the current `../csgo` 29-agent official catalog and reproduce its 116 ability, 16-map, combat, AI, HUD, and round contracts while preserving Godot-native physics effects.
 
 **Architecture:** Generate immutable Godot data and local media from the read-only `../csgo` worktree, then run all gameplay through native GDScript catalog, runtime, mechanics, and world-adapter layers. Node contract tests prove source parity; headless GDScript tests prove behavior; Web smoke tests prove layout, interaction, rendering, and deployment.
 
@@ -31,7 +31,7 @@ assert.deepEqual(godot.agents.map(agent => agent.id), upstream.AGENT_LIST);
 assert.deepEqual(godot.maps.map(map => map.id), upstreamMaps.map(map => map.id));
 ```
 
-It also checks name, role, color, ultimate cost, slot name/type/impl/cost/max/start/cooldown/intent, local portrait/icon files, unique implementation ids, and exactly 11 maps.
+It also checks name, role, color, ultimate cost, slot name/type/impl/cost/max/start/cooldown/intent, local portrait/icon files, unique implementation ids, and exactly 16 maps.
 
 **Step 2: Run the test to verify it fails**
 
@@ -47,7 +47,7 @@ Import the upstream ES modules, serialize colors as `#rrggbb`, preserve C/Q/E/X 
 
 Run: `npm run sync:csgo && node --test tests/parity_contract.test.mjs`
 
-Expected: PASS with `29 agents`, `116 abilities`, `145 media files`, and `11 maps`.
+Expected: PASS with `29 agents`, `116 abilities`, `145 media files`, and `16 maps`.
 
 **Step 5: Commit**
 
@@ -245,9 +245,9 @@ Translate upstream intents (`entry`, `cover`, `control`, `damage`, `escape`, `he
 
 Run: `godot --headless --path . --script tests/run_tests.gd`
 
-Run: `for map in yiji santa liexia tiangang xuefeng rongcheng gumiao huanjie sixiang chongqing tianshu; do TP_AUTOSTART=$map godot --headless --path . --quit-after 3000 || exit 1; done`
+Run: `for map in yiji santa liexia tiangang xuefeng rongcheng gumiao huanjie sixiang chongqing tianshu yunque chaomen chilian jingcheng longji; do TP_AUTOSTART=$map godot --headless --path . --quit-after 3000 || exit 1; done`
 
-Expected: all tests pass and all 11 map startups reach live play without errors.
+Expected: all tests pass and all 16 map startups reach live play without errors.
 
 **Step 5: Commit**
 

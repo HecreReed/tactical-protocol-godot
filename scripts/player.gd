@@ -1,4 +1,4 @@
-# player.gd — 玩家：移动/射击/技能(11特工)/护甲/买卖/拾取/大招
+# player.gd — 玩家：移动/射击/官方特工技能/护甲/买卖/拾取/大招
 extends CharacterBody3D
 
 const Weapons := preload("res://scripts/weapons.gd")
