@@ -3,6 +3,8 @@
 class_name MapBuilder
 extends Node3D
 
+const TexGen := preload("res://scripts/tex_gen.gd")
+
 var md: Dictionary = {}
 var world_size: float = 140.0
 var barriers: Array = []          # StaticBody3D 列表（购买阶段光幕）
@@ -27,6 +29,23 @@ static func load_all() -> Dictionary:
 		return {}
 	return parsed
 
+const FLOOR_THEME := {
+	"chongqing": "terrace", "liexia": "terrace", "xuefeng": "snow", "gumiao": "tile",
+	"yiji": "stone", "santa": "tile", "huanjie": "asphalt", "rongcheng": "asphalt",
+	"sixiang": "tile", "tiangang": "deck"
+}
+
+static func _mat_tex(tex: ImageTexture, tint: Color, tile_m: float, rough: float, metal: float = 0.0) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = tex
+	m.albedo_color = tint
+	m.uv1_triplanar = true
+	m.uv1_world_triplanar = true
+	m.uv1_scale = Vector3.ONE * (1.0 / tile_m)
+	m.roughness = rough
+	m.metallic = metal
+	return m
+
 func build(map_dict: Dictionary, world: float) -> void:
 	md = map_dict
 	world_size = world
@@ -37,18 +56,15 @@ func build(map_dict: Dictionary, world: float) -> void:
 	nav_region = Node3D.new()
 	add_child(nav_region)
 
-	# ---- 地面 ----
-	var floor_mat := StandardMaterial3D.new()
-	floor_mat.albedo_color = ground
-	floor_mat.roughness = 0.95
+	# ---- 地面（每图主题程序化纹理：等高线/雪原/石板/沥青/甲板） ----
+	var theme: String = FLOOR_THEME.get(md.get("id", ""), "stone")
+	var floor_mat := _mat_tex(TexGen.floor_theme(theme), ground.lerp(Color.WHITE, 0.55), 10.0 if theme == "terrace" else 6.0, 0.95)
 	_box(nav_region, Vector3(0, -0.5, 0), Vector3(world, 1, world), floor_mat, true)
 
 	# ---- 外墙（由开放区反推：与网页版同算法生成行条） ----
 	var half := int(world / 2.0)
 	var open: Array = md["open"]
-	var wall_mat := StandardMaterial3D.new()
-	wall_mat.albedo_color = wall_tone
-	wall_mat.roughness = 0.85
+	var wall_mat := _mat_tex(TexGen.wall(), wall_tone.lerp(Color.WHITE, 0.35), 4.0, 0.85)
 	for z in range(-half, half):
 		var run_start := -9999
 		for x in range(-half, half + 1):
@@ -66,9 +82,7 @@ func build(map_dict: Dictionary, world: float) -> void:
 		_box(nav_region, Vector3((w[0] + w[2]) / 2.0, w[4] / 2.0, (w[1] + w[3]) / 2.0), Vector3(w[2] - w[0], w[4], w[3] - w[1]), wall_mat, true)
 
 	# ---- 平台 / 楼梯 / 桥 ----
-	var plat_mat := StandardMaterial3D.new()
-	plat_mat.albedo_color = Color(0.62, 0.68, 0.72)
-	plat_mat.roughness = 0.75
+	var plat_mat := _mat_tex(TexGen.metal(), Color(0.78, 0.86, 0.92), 3.0, 0.72, 0.3)
 	for p in md["platforms"]:
 		_box(nav_region, Vector3((p[0] + p[2]) / 2.0, p[4] / 2.0, (p[1] + p[3]) / 2.0), Vector3(p[2] - p[0], p[4], p[3] - p[1]), plat_mat, true)
 	for st in md["stairs"]:
@@ -77,20 +91,15 @@ func build(map_dict: Dictionary, world: float) -> void:
 		_box(nav_region, Vector3((b[0] + b[2]) / 2.0, b[4] - 0.175, (b[1] + b[3]) / 2.0), Vector3(b[2] - b[0], 0.35, b[3] - b[1]), plat_mat, true)
 
 	# ---- 箱子 ----
-	var crate_mat := StandardMaterial3D.new()
-	crate_mat.albedo_color = Color(0.55, 0.45, 0.34)
-	crate_mat.roughness = 0.9
-	var metal_mat := StandardMaterial3D.new()
-	metal_mat.albedo_color = Color(0.5, 0.56, 0.6)
-	metal_mat.metallic = 0.3
+	var crate_mat := _mat_tex(TexGen.crate(), Color(1, 1, 1), 2.0, 0.9)
+	var metal_mat := _mat_tex(TexGen.metal(), Color(0.72, 0.80, 0.86), 2.0, 0.55, 0.35)
 	for c in md["crates"]:
 		var y0: float = c[5] if c.size() > 5 else 0.0
 		var mat: StandardMaterial3D = metal_mat if (c.size() > 4 and int(c[4]) == 1) else crate_mat
 		_box(nav_region, Vector3(c[0], y0 + c[3] / 2.0, c[1]), Vector3(c[2], c[3], c[2]), mat, true)
 
 	# ---- 屋顶（不可站立：碰撞体加高，与网页版一致） ----
-	var roof_mat := StandardMaterial3D.new()
-	roof_mat.albedo_color = wall_tone.darkened(0.25)
+	var roof_mat := _mat_tex(TexGen.wall(), wall_tone.darkened(0.25), 4.0, 0.9)
 	for r in md["roofs"]:
 		_box(nav_region, Vector3((r[0] + r[2]) / 2.0, r[4] + 0.12, (r[1] + r[3]) / 2.0), Vector3(r[2] - r[0], 0.25, r[3] - r[1]), roof_mat, false)
 		_collider_only(nav_region, Vector3((r[0] + r[2]) / 2.0, r[4] + 1.3, (r[1] + r[3]) / 2.0), Vector3(r[2] - r[0], 2.6, r[3] - r[1]))
