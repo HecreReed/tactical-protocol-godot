@@ -6,7 +6,7 @@ const Ab := preload("res://scripts/abilities.gd")
 const CharRig := preload("res://scripts/char_rig.gd")
 
 const SPEED := 6.0
-const GRAV := 19.0
+const GRAV := 18.0
 
 var main: Node3D
 var team := "enemy"
@@ -56,6 +56,7 @@ var strafe_t := 0.0
 var strafe_dir := 1.0
 var last_shot_at := -9.0
 var crouching := false
+var next_repath := 0.0
 
 func setup(m: Node3D, t: String, aid: String) -> void:
 	main = m
@@ -206,6 +207,10 @@ func _navigate(dt: float, now: float) -> void:
 			path_i += 1
 		else:
 			break
+	if path_i >= path.size() and not nav_finished() and now > next_repath:
+		next_repath = now + 1.5
+		path = main.map.nav_path(global_position, goal)
+		path_i = 0
 	if nav_finished():
 		velocity.x = move_toward(velocity.x, 0, 30 * dt)
 		velocity.z = move_toward(velocity.z, 0, 30 * dt)

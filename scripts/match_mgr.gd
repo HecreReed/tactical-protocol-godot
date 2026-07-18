@@ -25,10 +25,41 @@ var execute_called := false
 var live_start := 0.0
 var loss_streak := { "ally": 0, "enemy": 0 }
 var _next_beep := 0.0
+var spike_vis: MeshInstance3D
 
 func setup(m: Node3D) -> void:
 	main = m
+	spike_vis = MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = Vector3(0.28, 0.34, 0.16)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.25, 0.1, 0.1)
+	mat.emission_enabled = true
+	mat.emission = Color(1.0, 0.3, 0.3)
+	mat.emission_energy_multiplier = 1.8
+	bm.material = mat
+	spike_vis.mesh = bm
+	main.add_child(spike_vis)
+	spike_vis.visible = false
 	start_round()
+
+func _update_spike_vis() -> void:
+	if spike_state == "carried" and spike_carrier != null and is_instance_valid(spike_carrier) and spike_carrier.alive:
+		if spike_carrier == main.player:
+			spike_vis.visible = false
+			return
+		spike_vis.visible = true
+		var p: Vector3 = spike_carrier.global_position
+		var yw: float = spike_carrier.yaw if "yaw" in spike_carrier else 0.0
+		# 背在背后（模型背面 +Z 方向）
+		spike_vis.global_position = p + Vector3(sin(yw), 0, cos(yw)) * 0.42 + Vector3(0, 1.28, 0)
+		spike_vis.rotation.y = yw
+	elif spike_state == "dropped":
+		spike_vis.visible = true
+		spike_vis.global_position = Vector3(spike_pos.x, 0.25, spike_pos.z)
+		spike_vis.rotation.y += 0.03
+	else:
+		spike_vis.visible = false
 
 func now() -> float:
 	return main.now()
@@ -92,6 +123,7 @@ func _reset_player(pos: Vector3) -> void:
 
 func _process(_dt: float) -> void:
 	var n := now()
+	_update_spike_vis()
 	match phase:
 		"buy":
 			if n >= t_phase:
@@ -249,8 +281,9 @@ func bot_think(bot: Node, n: float) -> void:
 		return
 	if phase == "planted":
 		if side == "def":
-			bot.state = "defuse"
-			bot.set_goal(spike_pos)
+			if bot.state != "defuse":
+				bot.state = "defuse"
+				bot.set_goal(spike_pos)
 			if bot.global_position.distance_to(spike_pos) < 2.0:
 				defuse_tick(bot, 0.15)
 		else:
@@ -260,11 +293,13 @@ func bot_think(bot: Node, n: float) -> void:
 		return
 	# 拾取掉落炸弹
 	if side == "atk" and spike_state == "dropped":
-		bot.state = "fetch"
-		bot.set_goal(spike_pos)
+		if bot.state != "fetch":
+			bot.state = "fetch"
+			bot.set_goal(spike_pos)
 		if bot.global_position.distance_to(spike_pos) < 1.6:
 			spike_carrier = bot
 			spike_state = "carried"
+			bot.state = "wait"
 		return
 	if side == "atk":
 		if spike_carrier == bot:
@@ -274,8 +309,9 @@ func bot_think(bot: Node, n: float) -> void:
 				bot.velocity = Vector3.ZERO
 				plant_tick(bot, 0.15)
 			else:
-				bot.state = "execute"
-				bot.set_goal(plant)
+				if bot.state != "execute":
+					bot.state = "execute"
+					bot.set_goal(plant)
 		else:
 			if execute_called:
 				var holds: Array = main.map.atk_holds.get(plan_site, [])

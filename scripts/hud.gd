@@ -650,25 +650,47 @@ func _draw_minimap(c: Control) -> void:
 	var w: float = c.size.x
 	var world: float = main.map.world_size
 	var k := w / world
+	var font := c.get_theme_default_font()
 	c.draw_rect(Rect2(0, 0, w, w), Color(0.03, 0.06, 0.09, 0.85))
 	for r in main.map.md["open"]:
 		c.draw_rect(Rect2((r[0] + world / 2) * k, (r[1] + world / 2) * k, (r[2] - r[0]) * k, (r[3] - r[1]) * k), Color(0.16, 0.22, 0.27))
 	for key in main.map.sites.keys():
+		var rect: Array = main.map.sites[key]["rect"]
+		c.draw_rect(Rect2((rect[0] + world / 2) * k, (rect[1] + world / 2) * k, (rect[2] - rect[0]) * k, (rect[3] - rect[1]) * k), Color(0.22, 0.45, 0.47, 0.45))
 		var pl: Vector3 = main.map.sites[key]["plant"]
-		c.draw_circle(Vector2((pl.x + world / 2) * k, (pl.z + world / 2) * k), 4, Color(0.5, 0.82, 0.83, 0.6))
+		c.draw_string(font, Vector2((pl.x + world / 2) * k - 5, (pl.z + world / 2) * k + 6), key, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(0.5, 0.86, 0.87))
+	var mm = main.match_mgr
 	for e in main.combatants():
 		if not e.alive:
 			continue
 		var pos := Vector2((e.global_position.x + world / 2) * k, (e.global_position.z + world / 2) * k)
 		if e == main.player:
-			c.draw_circle(pos, 4, Color.WHITE)
+			continue
 		elif e.team == main.player.team:
 			c.draw_circle(pos, 3, C_TEAL)
 		elif main.now() < e.revealed_until or main.has_los(main.player.eye_pos(), e.eye_pos(), [main.player, e]):
 			c.draw_circle(pos, 3, C_RED)
-	if main.match_mgr.spike_state != "carried":
-		var sp: Vector3 = main.match_mgr.spike_pos
-		c.draw_circle(Vector2((sp.x + world / 2) * k, (sp.z + world / 2) * k), 4, Color(1, 0.25, 0.3))
+	# Spike 标记：携带者（己方可见）/掉落/已安放
+	if mm.spike_state == "carried" and mm.spike_carrier != null and is_instance_valid(mm.spike_carrier) and mm.spike_carrier.alive:
+		if mm.side_of(main.player) == "atk":
+			var cp: Vector3 = mm.spike_carrier.global_position
+			c.draw_rect(Rect2((cp.x + world / 2) * k - 3, (cp.z + world / 2) * k - 3, 6, 6), C_GOLD)
+	elif mm.spike_state != "carried":
+		var sp: Vector3 = mm.spike_pos
+		c.draw_rect(Rect2((sp.x + world / 2) * k - 3.5, (sp.z + world / 2) * k - 3.5, 7, 7), C_RED if mm.spike_state == "planted" else C_GOLD)
+	# 玩家：朝向箭头三角
+	if main.player.alive or main.player.spectating == null:
+		var p = main.player
+		var pp := Vector2((p.global_position.x + world / 2) * k, (p.global_position.z + world / 2) * k)
+		var f := Vector2(-sin(p.yaw), -cos(p.yaw))
+		var perp := Vector2(-f.y, f.x)
+		c.draw_colored_polygon(PackedVector2Array([pp + f * 7.0, pp - f * 3.0 + perp * 4.0, pp - f * 1.2, pp - f * 3.0 - perp * 4.0]), Color.WHITE)
+	elif main.player.spectating != null and is_instance_valid(main.player.spectating):
+		var sb = main.player.spectating
+		var sp2 := Vector2((sb.global_position.x + world / 2) * k, (sb.global_position.z + world / 2) * k)
+		var f2 := Vector2(-sin(sb.yaw), -cos(sb.yaw))
+		var perp2 := Vector2(-f2.y, f2.x)
+		c.draw_colored_polygon(PackedVector2Array([sp2 + f2 * 7.0, sp2 - f2 * 3.0 + perp2 * 4.0, sp2 - f2 * 1.2, sp2 - f2 * 3.0 - perp2 * 4.0]), Color.WHITE)
 
 # ---------------- 技能格 ----------------
 var _ab_cache := ""

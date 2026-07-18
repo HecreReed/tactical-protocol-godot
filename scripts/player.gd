@@ -5,8 +5,8 @@ const Weapons := preload("res://scripts/weapons.gd")
 const Ab := preload("res://scripts/abilities.gd")
 
 const SPEED := 6.0
-const JUMP_VEL := 5.6
-const GRAV := 19.0
+const JUMP_VEL := 6.9
+const GRAV := 18.0
 const SENS := 0.0022
 
 var main: Node3D
@@ -57,6 +57,9 @@ var ads := false
 var sens_mult := 1.0
 var fov_base := 71.0
 var step_acc := 0.0
+var cast_mode := ""
+var mouse_ignore_until := 0.0
+var _was_captured := true
 
 func _ready() -> void:
 	cam = Camera3D.new()
@@ -126,12 +129,27 @@ func _rebuild_viewmodel() -> void:
 	var grey := _vm_mat(Color8(0x39, 0x42, 0x4c), 0.5, 0.35)
 	var g := Node3D.new()
 	var cat: String = weapon["def"]["cat"]
-	if rocket_ult > 0:
+	if cast_mode != "":
+		# 手持技能：发光法球 + 握持手（复刻网页版装备式施法）
+		var col: Color = Ab.AGENTS[agent_id]["color"]
+		var orb := MeshInstance3D.new()
+		var om := SphereMesh.new()
+		om.radius = 0.055
+		om.height = 0.11
+		om.material = _vm_mat(col, 0.35, 0.0, col, 1.4)
+		orb.mesh = om
+		orb.position = Vector3(0, -0.01, -0.18)
+		orb.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		g.add_child(orb)
+		var hand := _vm_box(Vector3(0.055, 0.05, 0.11), _vm_mat(Color8(0x22, 0x2a, 0x33), 0.55, 0.25), Vector3(0, -0.075, -0.1), 0.35)
+		g.add_child(hand)
+	elif rocket_ult > 0:
 		g.add_child(_vm_cyl(0.058, 0.62, dark, Vector3(0, 0, -0.3)))
 		g.add_child(_vm_cyl(0.073, 0.1, accent, Vector3(0, 0, -0.62)))
 		g.add_child(_vm_box(Vector3(0.035, 0.1, 0.045), dark, Vector3(0, -0.09, -0.12), 0.3))
-	elif knife_ult > 0:
-		var blade := _vm_box(Vector3(0.015, 0.05, 0.26), _vm_mat(Color8(0x7f, 0xd0, 0xd4), 0.4, 0.35, Color8(0x7f, 0xd0, 0xd4), 0.8), Vector3(0, 0, -0.16))
+	elif knife_ult > 0 or cat == "melee":
+		var bcol := Color8(0x7f, 0xd0, 0xd4) if knife_ult > 0 else Color8(0xb8, 0xc4, 0xcc)
+		var blade := _vm_box(Vector3(0.015, 0.05, 0.26), _vm_mat(bcol, 0.4, 0.55, bcol, 0.8 if knife_ult > 0 else 0.0), Vector3(0, 0, -0.16))
 		g.add_child(blade)
 		g.add_child(_vm_box(Vector3(0.03, 0.04, 0.1), dark, Vector3.ZERO))
 	else:
@@ -184,6 +202,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			spectate_idx += 1
 		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		# 指针锁刚恢复/浏览器合成的大位移事件 → 丢弃，防止视角瞬间乱跳
+		if main.now() < mouse_ignore_until or event.relative.length() > 250.0:
+			return
 		var s := SENS * sens_mult * (0.35 if _scoped() else 1.0)
 		yaw -= event.relative.x * s
 		pitch = clampf(pitch - event.relative.y * s, -1.55, 1.55)
@@ -194,27 +215,31 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_released("ads"):
 		ads = false
 	if event.is_action_pressed("slot1"):
+		cast_mode = ""
 		if primary.size() > 0:
 			weapon = primary
 			slot = "primary"
 		else:
 			main.sfx.play("deny")
 	if event.is_action_pressed("slot2"):
+		cast_mode = ""
 		weapon = secondary
 		slot = "secondary"
 	if event.is_action_pressed("slot3"):
+		cast_mode = ""
 		weapon = knife_w
 		slot = "knife"
 	if event.is_action_pressed("reload"):
+		cast_mode = ""
 		_start_reload()
 	if event.is_action_pressed("ability_c"):
-		Ab.cast(main, self, "c")
+		_equip_ability("c")
 	if event.is_action_pressed("ability_q"):
-		Ab.cast(main, self, "q")
+		_equip_ability("q")
 	if event.is_action_pressed("ability_e"):
-		Ab.cast(main, self, "e")
+		_equip_ability("e")
 	if event.is_action_pressed("ability_x"):
-		Ab.cast(main, self, "x")
+		_equip_ability("x")
 	if event.is_action_pressed("buy_menu"):
 		main.hud.toggle_buy()
 	if event.is_action_pressed("scoreboard"):
@@ -223,6 +248,27 @@ func _unhandled_input(event: InputEvent) -> void:
 		main.hud.show_board(false)
 	if event is InputEventKey and event.pressed and event.physical_keycode == KEY_ESCAPE:
 		main.hud.toggle_pause()
+
+func _equip_ability(k: String) -> void:
+	# 无畏契约式装备施法：按键拿到手上，左键释放，再按同键收回
+	if cast_mode == k:
+		cast_mode = ""
+		return
+	var sl: Dictionary = ability_slots[k]
+	if k == "x":
+		if ult_points < Ab.AGENTS[agent_id]["ult_cost"]:
+			main.sfx.play("deny")
+			return
+		# 切换型大招直接激活（锋刃/火箭/猎杀）
+		var xt: String = Ab.AGENTS[agent_id]["x"]["type"]
+		if xt in ["knife_ult", "rocket_ult", "hunter_ult", "phoenix_ult", "null_pulse", "shadow_ult"]:
+			if Ab.cast(main, self, "x"):
+				main.sfx.play("ability")
+			return
+	elif sl["n"] <= 0 or (k == "e" and main.now() < sl["cd_until"]):
+		main.sfx.play("deny")
+		return
+	cast_mode = k
 
 func _scoped() -> bool:
 	return weapon["def"].get("scope", false) and ads
@@ -237,8 +283,12 @@ func _physics_process(dt: float) -> void:
 		cam.position = Vector3(0, 1.55, 0)
 		cam.rotation = Vector3(pitch, 0, 0)
 	var now: float = main.now()
+	var cap := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+	if cap and not _was_captured:
+		mouse_ignore_until = now + 0.15
+	_was_captured = cap
 	# 视模刷新（换枪/大招武器切换时）
-	var vm_id: String = weapon["def"]["name"] + ("K" if knife_ult > 0 else "") + ("R" if rocket_ult > 0 else "")
+	var vm_id: String = weapon["def"]["name"] + ("K" if knife_ult > 0 else "") + ("R" if rocket_ult > 0 else "") + cast_mode
 	if vm_id != _vm_weapon_id:
 		_vm_weapon_id = vm_id
 		_rebuild_viewmodel()
@@ -291,6 +341,12 @@ func _physics_process(dt: float) -> void:
 		weapon["reserve"] -= take
 		weapon["reload_end"] = 0.0
 	# 射击（含大招武器）
+	if cast_mode != "" and Input.is_action_just_pressed("fire"):
+		var ck := cast_mode
+		cast_mode = ""
+		if Ab.cast(main, self, ck):
+			main.sfx.play("ability")
+		return
 	if Input.is_action_pressed("fire") and main.can_fight() and now >= weapon["next_fire"] and weapon["reload_end"] == 0.0:
 		if rocket_ult > 0:
 			rocket_ult -= 1

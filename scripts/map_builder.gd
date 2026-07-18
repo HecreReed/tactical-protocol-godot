@@ -104,20 +104,65 @@ func build(map_dict: Dictionary, world: float) -> void:
 		_box(nav_region, Vector3((r[0] + r[2]) / 2.0, r[4] + 0.12, (r[1] + r[3]) / 2.0), Vector3(r[2] - r[0], 0.25, r[3] - r[1]), roof_mat, false)
 		_collider_only(nav_region, Vector3((r[0] + r[2]) / 2.0, r[4] + 1.3, (r[1] + r[3]) / 2.0), Vector3(r[2] - r[0], 2.6, r[3] - r[1]))
 
-	# ---- 点位标记 ----
+	# ---- 点位标记：区域着色框 + 发光描边 + 大字母 ----
 	for key in md["sites"].keys():
 		var s: Dictionary = md["sites"][key]
 		var plant: Array = s["plant"]
-		sites[key] = { "rect": s["rect"], "plant": Vector3(plant[0], 0, plant[1]) }
+		var rect: Array = s["rect"]
+		sites[key] = { "rect": rect, "plant": Vector3(plant[0], 0, plant[1]) }
+		# 区域地面着色
+		var tint := MeshInstance3D.new()
+		var tb := BoxMesh.new()
+		tb.size = Vector3(rect[2] - rect[0], 0.06, rect[3] - rect[1])
+		var tmat := StandardMaterial3D.new()
+		tmat.albedo_color = Color(0.16, 0.29, 0.31, 0.45)
+		tmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		tmat.emission_enabled = true
+		tmat.emission = Color(0.1, 0.23, 0.25)
+		tmat.emission_energy_multiplier = 0.35
+		tb.material = tmat
+		tint.mesh = tb
+		tint.position = Vector3((rect[0] + rect[2]) / 2.0, 0.035, (rect[1] + rect[3]) / 2.0)
+		add_child(tint)
+		# 发光描边（四边）
+		var emat := StandardMaterial3D.new()
+		emat.albedo_color = accent
+		emat.emission_enabled = true
+		emat.emission = accent
+		emat.emission_energy_multiplier = 1.6
+		var edges := [
+			[Vector3((rect[0] + rect[2]) / 2.0, 0.06, rect[1]), Vector3(rect[2] - rect[0], 0.08, 0.18)],
+			[Vector3((rect[0] + rect[2]) / 2.0, 0.06, rect[3]), Vector3(rect[2] - rect[0], 0.08, 0.18)],
+			[Vector3(rect[0], 0.06, (rect[1] + rect[3]) / 2.0), Vector3(0.18, 0.08, rect[3] - rect[1])],
+			[Vector3(rect[2], 0.06, (rect[1] + rect[3]) / 2.0), Vector3(0.18, 0.08, rect[3] - rect[1])],
+		]
+		for eg in edges:
+			var em := MeshInstance3D.new()
+			var eb := BoxMesh.new()
+			eb.size = eg[1]
+			eb.material = emat
+			em.mesh = eb
+			em.position = eg[0]
+			add_child(em)
+		# 地面大字母（复刻网页版 letterTexture 7m 平铺字）
+		var letter := Label3D.new()
+		letter.text = key
+		letter.font_size = 320
+		letter.pixel_size = 0.02
+		letter.modulate = Color(0.5, 0.82, 0.83, 0.85)
+		letter.rotation_degrees = Vector3(-90, 0, 0)
+		letter.position = Vector3(plant[0], 0.09, plant[1])
+		add_child(letter)
+		# 下包环
 		var ring := MeshInstance3D.new()
 		var tor := TorusMesh.new()
 		tor.inner_radius = 1.45
 		tor.outer_radius = 1.7
-		var em := StandardMaterial3D.new()
-		em.albedo_color = accent
-		em.emission_enabled = true
-		em.emission = accent
-		tor.material = em
+		var em2 := StandardMaterial3D.new()
+		em2.albedo_color = accent
+		em2.emission_enabled = true
+		em2.emission = accent
+		tor.material = em2
 		ring.mesh = tor
 		ring.position = Vector3(plant[0], 0.08, plant[1])
 		add_child(ring)
