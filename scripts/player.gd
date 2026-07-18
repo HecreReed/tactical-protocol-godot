@@ -5,7 +5,7 @@ const Weapons := preload("res://scripts/weapons.gd")
 const Ab := preload("res://scripts/abilities.gd")
 
 const SPEED := 6.0
-const JUMP_VEL := 6.9
+const JUMP_VEL := 6.2
 const GRAV := 18.0
 const SENS := 0.0022
 
@@ -314,6 +314,7 @@ func _physics_process(dt: float) -> void:
 	elif Input.is_action_pressed("jump") and channel == "":
 		velocity.y = JUMP_VEL
 	move_and_slide()
+	_step_assist()
 	step_acc += Vector2(velocity.x, velocity.z).length() * dt
 	if step_acc > 2.8:
 		step_acc = 0.0
@@ -408,6 +409,26 @@ func _spectate(dt: float) -> void:
 		spectating = null
 		cam.global_position = cam.global_position.lerp(Vector3(0, 42, 12), minf(1.0, dt * 3.0))
 		cam.global_transform.basis = cam.global_transform.basis.slerp(Basis.from_euler(Vector3(-1.25, 0, 0)), minf(1.0, dt * 3.0))
+
+func _step_assist() -> void:
+	# 楼梯/矮台阶直接走（≤0.5m），跳跃留给箱子
+	if not is_on_wall() or not is_on_floor():
+		return
+	var hv := Vector3(velocity.x, 0, velocity.z)
+	if hv.length() < 1.0:
+		return
+	var dir := hv.normalized()
+	var ahead := global_position + dir * 0.55
+	var space := get_world_3d().direct_space_state
+	var q := PhysicsRayQueryParameters3D.create(ahead + Vector3(0, 1.4, 0), ahead + Vector3(0, 0.02, 0))
+	q.exclude = [get_rid()]
+	q.collision_mask = 1
+	var hit := space.intersect_ray(q)
+	if hit.is_empty():
+		return
+	var rise: float = hit["position"].y - global_position.y
+	if rise > 0.08 and rise <= 0.5:
+		global_position.y = hit["position"].y + 0.02
 
 func _try_pickup() -> void:
 	var d: Dictionary = main.nearest_drop(global_position, 1.8)

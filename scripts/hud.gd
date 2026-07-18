@@ -42,6 +42,7 @@ var ability_box: HBoxContainer
 var banner_big: Label
 var banner_sub: Label
 var spec_l: Label
+var interact_l: Label
 var crosshair: Control
 var vignette: ColorRect
 var flash_rect: ColorRect
@@ -266,6 +267,13 @@ func setup(m: Node3D) -> void:
 	banner_big.add_theme_constant_override("outline_size", 10)
 	banner_sub = _lbl(bv, 15, C_DIM)
 	banner_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	interact_l = _lbl(self, 15, C_GOLD)
+	interact_l.set_anchors_preset(Control.PRESET_CENTER)
+	interact_l.position = Vector2(-220, 90)
+	interact_l.custom_minimum_size = Vector2(440, 0)
+	interact_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	interact_l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
+	interact_l.add_theme_constant_override("outline_size", 6)
 	spec_l = _lbl(self, 15, C_WHITE)
 	spec_l.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	spec_l.position = Vector2(-160, -140)
@@ -819,6 +827,24 @@ func _process(dt: float) -> void:
 		spec_l.text = "阵亡 — 等待回合结束"
 	else:
 		spec_l.text = ""
+	# 交互提示：携带 SPIKE / 安放 / 拆除（复刻网页版 interactTip）
+	var tip := ""
+	if p.alive and not p.observer:
+		if mm.spike_carrier == p and mm.phase == "live":
+			if main.map.in_site(p.global_position) != "":
+				if p.channel == "plant":
+					tip = "安放中… %d%%" % int(mm.spike_prog / 4.0 * 100.0)
+				else:
+					tip = "按住 F 安放 SPIKE"
+			else:
+				tip = "携带 SPIKE — 前往包点安放"
+		elif mm.phase == "planted" and mm.side_of(p) == "def":
+			if p.global_position.distance_to(mm.spike_pos) < 2.5:
+				tip = ("拆除中… %d%%" % int(mm.defuse_prog / 7.0 * 100.0)) if p.channel == "defuse" else "按住 F 拆除 SPIKE"
+		elif mm.spike_state == "dropped" and mm.side_of(p) == "atk":
+			if p.global_position.distance_to(mm.spike_pos) < 12.0:
+				tip = "SPIKE 掉落在附近 — 走近拾取"
+	interact_l.text = tip
 	# 指针锁丢失兜底：无菜单打开但鼠标未捕获 → 显示"点击进入战场"
 	if not pause_open and not buy_open and main.match_mgr.phase != "over" and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		lock_hint.visible = true

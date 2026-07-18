@@ -106,10 +106,15 @@ func start_round() -> void:
 			di += 1
 	# 携弹者 = 进攻方随机 bot
 	spike_carrier = null
+	var roles := ["entry", "entry", "scout", "flank", "support"]
+	var ri := 0
 	for e in main.combatants():
 		if side_of(e) == "atk" and e != main.player and e.alive:
-			spike_carrier = e
-			break
+			if spike_carrier == null:
+				spike_carrier = e
+			if "assault_role" in e:
+				e.assault_role = roles[ri % roles.size()]
+				ri += 1
 	main.hud.banner("第 %d 回合 · %s" % [round_no, "进攻方" if ally_side == "atk" else "防守方"])
 
 func _reset_player(pos: Vector3) -> void:
@@ -126,6 +131,14 @@ func _reset_player(pos: Vector3) -> void:
 func _process(_dt: float) -> void:
 	var n := now()
 	_update_spike_vis()
+	# 玩家走近掉落的 SPIKE 自动拾取
+	if spike_state == "dropped" and not main.player.observer and main.player.alive and side_of(main.player) == "atk" \
+			and main.player.global_position.distance_to(spike_pos) < 1.6:
+		spike_carrier = main.player
+		spike_state = "carried"
+		spike_claimer = null
+		main.hud.banner("你拾取了 SPIKE")
+		main.sfx.play("buy")
 	match phase:
 		"buy":
 			if n >= t_phase:
@@ -363,7 +376,16 @@ func bot_think(bot: Node, n: float) -> void:
 			elif bot.state == "wait":
 				bot.state = "advance"
 				var st: Vector3 = main.map.stages.get(plan_site, main.map.sites[plan_site]["plant"])
-				bot.set_goal(st + Vector3(randf_range(-3.0, 3.0), 0, randf_range(-3.0, 3.0)))
+				var dest: Vector3 = st
+				if bot.assault_role == "flank" and spike_carrier != bot and main.map.sites.size() > 1:
+					# 绕后手：先去另一个点方向牵制，执行时再转点
+					for k in main.map.sites.keys():
+						if k != plan_site:
+							dest = main.map.stages.get(k, main.map.sites[k]["plant"])
+							break
+				elif bot.assault_role == "scout":
+					dest = st + Vector3(randf_range(-5.0, 5.0), 0, randf_range(-5.0, 5.0))
+				bot.set_goal(dest + Vector3(randf_range(-2.0, 2.0), 0, randf_range(-2.0, 2.0)))
 			elif bot.state == "advance" and bot.nav_finished():
 				bot.state = "stage"
 				bot.stage_at = n
@@ -373,7 +395,7 @@ func bot_think(bot: Node, n: float) -> void:
 				var mates := 0
 				var near := 0
 				for e in main.combatants():
-					if e.alive and side_of(e) == "atk" and e != main.player:
+					if e.alive and side_of(e) == "atk" and e != main.player and e.assault_role != "flank":
 						mates += 1
 						if e.global_position.distance_to(stage_pos) < 13.0:
 							near += 1
@@ -407,11 +429,49 @@ func _assign_def_post(bot: Node) -> void:
 	bot.hold_look = p["look"]
 
 func _assign_post_plant_hold(bot: Node) -> void:
+	var n := now()
+	# 敌人正在拆包且被察觉（看得见或离得近）→ 全力回防
+	if defuse_prog > 0.4:
+		var defusing: Node = null
+		for e in main.combatants():
+			if e.alive and side_of(e) == "def" and e.channel == "defuse":
+				defusing = e
+				break
+		if defusing != null:
+			var seen: bool = main.has_los(bot.eye_pos(), defusing.eye_pos(), [bot, defusing])
+			var close: bool = bot.global_position.distance_to(spike_pos) < 20.0
+			if seen or close:
+				if bot.state != "retake":
+					bot.state = "retake"
+					bot.set_goal(spike_pos)
+					bot.hold_look = Vector3.ZERO
+				return
+	if bot.state == "retake" and bot.nav_finished():
+		bot.state = "wait"
 	if bot.state == "hold_pp":
+		# 守包不发呆：周期换守位（架点之间轮换 / 绕包环形位）
+		if bot.nav_finished() and n >= bot.next_regroup:
+			bot.next_regroup = n + randf_range(7.0, 12.0)
+			var site_key: String = main.map.in_site(spike_pos)
+			var holds2: Array = main.map.atk_holds.get(site_key if site_key != "" else plan_site, [])
+			if holds2.size() > 0 and randf() < 0.6:
+				var h2: Dictionary = holds2[randi() % holds2.size()]
+				bot.set_goal(h2["p"])
+				bot.hold_look = h2["look"]
+			else:
+				var ang := randf() * TAU
+				bot.set_goal(spike_pos + Vector3(cos(ang) * 8.0, 0, sin(ang) * 8.0))
+				bot.hold_look = spike_pos
 		return
 	bot.state = "hold_pp"
-	var holds: Array = main.map.atk_holds.get(plan_site, [])
+	bot.next_regroup = n + randf_range(7.0, 12.0)
+	var site_key0: String = main.map.in_site(spike_pos)
+	var holds: Array = main.map.atk_holds.get(site_key0 if site_key0 != "" else plan_site, [])
 	if holds.size() > 0:
 		var h: Dictionary = holds[bot.get_instance_id() % holds.size()]
 		bot.set_goal(h["p"])
 		bot.hold_look = h["look"]
+	else:
+		var ang0 := randf() * TAU
+		bot.set_goal(spike_pos + Vector3(cos(ang0) * 7.0, 0, sin(ang0) * 7.0))
+		bot.hold_look = spike_pos

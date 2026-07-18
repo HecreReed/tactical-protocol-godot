@@ -66,6 +66,8 @@ var wander_yaw := 0.0
 var wander_p := Vector3.ZERO
 var has_wander := false
 var spawn_anchor := Vector3.ZERO
+var assault_role := "entry"
+var loot_until := 0.0
 
 func setup(m: Node3D, t: String, aid: String) -> void:
 	main = m
@@ -86,6 +88,26 @@ func setup(m: Node3D, t: String, aid: String) -> void:
 	add_child(rig)
 	rig.build(t, color, agent_name, t == "ally")
 	weapon = Weapons.make(["spectre", "bulldog", "vandal", "phantom"].pick_random())
+
+func _step_assist() -> void:
+	# 楼梯/矮台阶直接走上去（≤0.55m），不需要跳
+	if not is_on_wall() or not is_on_floor():
+		return
+	var hv := Vector3(velocity.x, 0, velocity.z)
+	if hv.length() < 1.0:
+		return
+	var dir := hv.normalized()
+	var ahead := global_position + dir * 0.55
+	var space := get_world_3d().direct_space_state
+	var q := PhysicsRayQueryParameters3D.create(ahead + Vector3(0, 1.4, 0), ahead + Vector3(0, 0.02, 0))
+	q.exclude = [get_rid()]
+	q.collision_mask = 1
+	var hit := space.intersect_ray(q)
+	if hit.is_empty():
+		return
+	var rise: float = hit["position"].y - global_position.y
+	if rise > 0.08 and rise <= 0.55:
+		global_position.y = hit["position"].y + 0.02
 
 func eye_pos() -> Vector3:
 	return global_position + Vector3(0, 1.55, 0)
@@ -120,10 +142,12 @@ func _physics_process(dt: float) -> void:
 	if target != null and now >= flash_until:
 		_combat(dt, now)
 	else:
+		crouching = false
 		_navigate(dt, now)
 	if not is_on_floor():
 		velocity.y -= GRAV * dt
 	move_and_slide()
+	_step_assist()
 	rotation.y = yaw
 	if rig != null:
 		rig.animate(Vector2(velocity.x, velocity.z).length(), crouching, now)
@@ -170,16 +194,23 @@ func _think(now: float) -> void:
 		weapon["reserve"] -= take
 		weapon["ammo"] += take
 		next_fire = now + weapon["def"]["rl"]
-	# 弹尽：捡枪或拼刀
+	# 弹尽：捡枪或拼刀（限时，捡不到就放弃拔刀，不再死循环）
 	if weapon["ammo"] <= 0 and weapon["reserve"] <= 0:
 		var d: Dictionary = main.nearest_drop(global_position, 45.0)
 		if not d.is_empty():
-			state = "loot"
-			set_goal(d["body"].global_position)
+			if state != "loot":
+				state = "loot"
+				loot_until = now + 8.0
+				set_goal(d["body"].global_position)
 			if global_position.distance_to(d["body"].global_position) < 1.6:
 				weapon = main.take_drop(d)
 				state = "wait"
-			return
+			elif now > loot_until:
+				state = "wait"
+			else:
+				return
+		elif state == "loot":
+			state = "wait"
 	if main.match_mgr.phase == "buy" and main.match_mgr.side_of(self) == "atk":
 		_buy_wander(now)
 		return
