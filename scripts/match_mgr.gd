@@ -28,6 +28,8 @@ var execute_called := false
 var live_start := 0.0
 var loss_streak := { "ally": 0, "enemy": 0 }
 var _next_beep := 0.0
+var _next_ch_tick := 0.0
+var _fake_checked := false
 var spike_vis: MeshInstance3D
 
 func setup(m: Node3D) -> void:
@@ -87,6 +89,7 @@ func start_round() -> void:
 	spike_prog = 0.0
 	defuse_prog = 0.0
 	execute_called = false
+	_fake_checked = false
 	spike_claimer = null
 	main.clear_round_fx()
 	var site_keys: Array = main.map.sites.keys()
@@ -158,12 +161,27 @@ func _process(_dt: float) -> void:
 				end_round("def", "时间耗尽")
 			elif n >= live_start + 20.0 and not execute_called:
 				execute_called = true
+			elif not execute_called and not _fake_checked and n >= live_start + 14.0:
+				_fake_checked = true
+				if randf() < 0.25 and main.map.sites.size() > 1:
+					# 假打转点：全队换目标点重新集结
+					for k in main.map.sites.keys():
+						if k != plan_site:
+							plan_site = k
+							break
+					for e in main.combatants():
+						if e != main.player and side_of(e) == "atk" and e.alive and e.state in ["advance", "stage"]:
+							e.state = "wait"
 			_check_elim()
 		"planted":
 			if n >= _next_beep:
 				var remain := explode_at - n
 				main.sfx.play("beep_fast" if remain < 12.0 else "beep", main.player.global_position.distance_to(spike_pos) * 0.5)
-				_next_beep = n + (0.4 if remain < 12.0 else 1.0)
+				var iv := 0.9
+				if remain < 5.0: iv = 0.11
+				elif remain < 12.0: iv = 0.22
+				elif remain < 25.0: iv = 0.45
+				_next_beep = n + iv
 			if n >= explode_at:
 				main.explosion_at(spike_pos)
 				end_round("atk", "炸弹引爆")
@@ -271,6 +289,12 @@ func on_death(ent: Node, killer: Node) -> void:
 	if killer != null and is_instance_valid(killer) and killer != ent:
 		killer.kills += 1
 		killer.ult_points = mini(9, killer.ult_points + 1)
+		if "last_kill_at" in killer:
+			killer.last_kill_at = now()
+			# 女皇仪式：击杀满血
+			if killer.empress_until > now():
+				killer.hp = 100.0
+				killer.stim_until = maxf(killer.stim_until, now() + 4.0)
 		if "money" in killer:
 			killer.money = mini(9000, killer.money + 200)
 		var kn: String = killer.agent_name if "agent_name" in killer else "你"
@@ -296,6 +320,9 @@ func plant_tick(ent: Node, dt: float) -> void:
 	ent.channel = "plant"
 	_plant_ent = ent
 	_last_plant_t = now()
+	if now() >= _next_ch_tick:
+		_next_ch_tick = now() + 0.45
+		main.sfx.play("beep", main.player.global_position.distance_to(ent.global_position) * 0.5)
 	spike_prog += dt
 	if spike_prog >= PLANT_TIME:
 		ent.channel = ""
@@ -323,6 +350,9 @@ func defuse_tick(ent: Node, dt: float) -> void:
 	ent.channel = "defuse"
 	_defuse_ent = ent
 	_last_defuse_t = now()
+	if now() >= _next_ch_tick:
+		_next_ch_tick = now() + 0.45
+		main.sfx.play("beep_fast", main.player.global_position.distance_to(ent.global_position) * 0.5)
 	defuse_prog += dt
 	if defuse_prog >= DEFUSE_TIME:
 		ent.channel = ""

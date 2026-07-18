@@ -306,11 +306,17 @@ func _bake_nav(open: Array, world: float) -> void:
 				var nkey: int = (gx + int(off[0]) + 2048) * 4096 + (gz + int(off[1]) + 2048)
 				if not _nav_cells.has(nkey) or nkey == key:
 					continue
+				# 对角连边要求两侧正交格都可走（防穿角，对齐网页版）
+				if off[0] != 0 and off[1] != 0:
+					var k1: int = (gx + int(off[0]) + 2048) * 4096 + (gz + 2048)
+					var k2: int = (gx + 2048) * 4096 + (gz + int(off[1]) + 2048)
+					if not _nav_cells.has(k1) or not _nav_cells.has(k2):
+						continue
 				for id_a in _nav_cells[key]:
 					var pa: Vector3 = astar.get_point_position(id_a)
 					for id_b in _nav_cells[nkey]:
 						var pb: Vector3 = astar.get_point_position(id_b)
-						if absf(pa.y - pb.y) <= 1.05:
+						if absf(pa.y - pb.y) <= 0.62:
 							astar.connect_points(id_a, id_b)
 
 func in_site(pos: Vector3) -> String:

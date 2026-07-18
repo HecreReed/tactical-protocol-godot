@@ -44,6 +44,8 @@ var suppressed_until := 0.0
 var revealed_until := 0.0
 var knife_ult := 0
 var arrow_ult := 0
+var last_kill_at := -99.0
+var empress_until := 0.0
 var rocket_ult := 0
 # 视模 / 观战
 var vm_group: Node3D
@@ -71,12 +73,14 @@ func _ready() -> void:
 	vm_group = Node3D.new()
 	cam.add_child(vm_group)
 	var col := CollisionShape3D.new()
-	var cap := CapsuleShape3D.new()
-	cap.radius = 0.38
-	cap.height = 1.75
-	col.shape = cap
+	_cap_shape = CapsuleShape3D.new()
+	_cap_shape.radius = 0.38
+	_cap_shape.height = 1.75
+	col.shape = _cap_shape
 	col.position = Vector3(0, 0.875, 0)
+	_cap_col = col
 	add_child(col)
+	collision_layer = 16
 	collision_mask = 1 | 8
 	secondary = Weapons.make("classic")
 	knife_w = { "id": "knife", "def": { "name": "战术刀", "cat": "melee", "cost": 0, "mag": -1, "res": -1, "fi": 0.55, "rl": 0.0, "dmg": {"h": 100, "b": 50, "l": 50}, "spread": 0.0, "range": 2.6 }, "ammo": -1, "reserve": -1, "reload_end": 0.0, "next_fire": 0.0 }
@@ -319,6 +323,7 @@ func _physics_process(dt: float) -> void:
 	dir.y = 0
 	dir = dir.normalized()
 	var spd: float = SPEED * CAT_SPEED.get(weapon["def"]["cat"], 1.0) * (0.52 if walk else 1.0) * (0.55 if crouching else 1.0) * (0.75 if _ads_active() else 1.0)
+	_wish_dir = dir
 	if now < slow_until: spd *= 0.45
 	if now < daze_until: spd *= 0.6
 	if now < stim_until: spd *= 1.12
@@ -336,6 +341,10 @@ func _physics_process(dt: float) -> void:
 		if not walk and not crouching:
 			main.sfx.play("step")
 
+	var want_h := 1.3 if crouching else 1.75
+	if _cap_shape != null and absf(_cap_shape.height - want_h) > 0.01:
+		_cap_shape.height = want_h
+		_cap_col.position.y = want_h / 2.0
 	cam.position.y = 1.15 if crouching else 1.55
 	cam.fov = lerpf(cam.fov, (30.0 if _scoped() else (fov_base * 0.82 if _ads_active() else fov_base)), dt * 14.0)
 	# 视模摆动/后座/换弹动画
@@ -430,16 +439,23 @@ func _spectate(dt: float) -> void:
 		cam.global_position = cam.global_position.lerp(Vector3(0, 42, 12), minf(1.0, dt * 3.0))
 		cam.global_transform.basis = cam.global_transform.basis.slerp(Basis.from_euler(Vector3(-1.25, 0, 0)), minf(1.0, dt * 3.0))
 
+var _wish_dir := Vector3.ZERO
+var _cap_shape: CapsuleShape3D
+var _cap_col: CollisionShape3D
+
 func _step_assist() -> void:
-	# 楼梯/矮台阶直接走（≤0.5m），跳跃留给箱子
-	if not is_on_wall() or not is_on_floor():
+	# 楼梯/矮台阶直接走（≤0.62m，对齐网页版），跳跃留给高箱
+	if not is_on_floor() or _wish_dir.length() < 0.1:
 		return
-	var hv := Vector3(velocity.x, 0, velocity.z)
-	if hv.length() < 1.0:
-		return
-	var dir := hv.normalized()
-	var ahead := global_position + dir * 0.55
+	var dir := _wish_dir.normalized()
 	var space := get_world_3d().direct_space_state
+	# 前方脚部有阻挡才尝试上台阶
+	var qf := PhysicsRayQueryParameters3D.create(global_position + Vector3(0, 0.25, 0), global_position + Vector3(0, 0.25, 0) + dir * 0.6)
+	qf.exclude = [get_rid()]
+	qf.collision_mask = 1
+	if space.intersect_ray(qf).is_empty():
+		return
+	var ahead := global_position + dir * 0.55
 	var q := PhysicsRayQueryParameters3D.create(ahead + Vector3(0, 1.4, 0), ahead + Vector3(0, 0.02, 0))
 	q.exclude = [get_rid()]
 	q.collision_mask = 1
@@ -447,7 +463,7 @@ func _step_assist() -> void:
 	if hit.is_empty():
 		return
 	var rise: float = hit["position"].y - global_position.y
-	if rise > 0.08 and rise <= 0.5:
+	if rise > 0.08 and rise <= 0.62:
 		global_position.y = hit["position"].y + 0.02
 
 func _try_pickup() -> void:
@@ -514,6 +530,8 @@ func take_damage(dmg: float, killer: Node = null, _hs: bool = false) -> void:
 		if primary.size() > 0:
 			main.drop_weapon(self, primary)
 			primary = {}
+			weapon = secondary
+			slot = "secondary"
 		main.spawn_ragdoll(self, (global_position - (killer.global_position if killer != null and is_instance_valid(killer) else global_position)).normalized())
 		main.match_mgr.on_death(self, killer)
 

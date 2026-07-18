@@ -45,6 +45,8 @@ var suppressed_until := 0.0
 var revealed_until := 0.0
 var knife_ult := 0
 var arrow_ult := 0
+var last_kill_at := -99.0
+var empress_until := 0.0
 var rocket_ult := 0
 var last_seen := Vector3.ZERO
 var hunt_until := 0.0
@@ -80,30 +82,43 @@ func setup(m: Node3D, t: String, aid: String) -> void:
 	agent_id = aid
 	agent_name = Ab.AGENTS[aid]["name"]
 	ability_slots = Ab.make_slots(aid)
+	collision_layer = 16
 	collision_mask = 1 | 8
 	var color: Color = Ab.AGENTS[aid]["color"]
 	var col := CollisionShape3D.new()
-	var cap := CapsuleShape3D.new()
-	cap.radius = 0.38
-	cap.height = 1.75
-	col.shape = cap
+	_cap_shape = CapsuleShape3D.new()
+	_cap_shape.radius = 0.38
+	_cap_shape.height = 1.75
+	col.shape = _cap_shape
 	col.position = Vector3(0, 0.875, 0)
+	_cap_col = col
 	add_child(col)
 	rig = CharRig.new()
 	add_child(rig)
 	rig.build(t, color, agent_name, t == "ally")
 	weapon = Weapons.make("classic")
 
+var _wish_dir := Vector3.ZERO
+var _cap_shape: CapsuleShape3D
+var _cap_col: CollisionShape3D
+
 func _step_assist() -> void:
-	# 楼梯/矮台阶直接走上去（≤0.55m），不需要跳
-	if not is_on_wall() or not is_on_floor():
+	# 楼梯/矮台阶直接走上去（≤0.62m），不需要跳
+	if not is_on_floor():
 		return
-	var hv := Vector3(velocity.x, 0, velocity.z)
-	if hv.length() < 1.0:
+	var dir := _wish_dir
+	if dir.length() < 0.1:
+		dir = Vector3(velocity.x, 0, velocity.z)
+	if dir.length() < 0.5:
 		return
-	var dir := hv.normalized()
-	var ahead := global_position + dir * 0.55
+	dir = dir.normalized()
 	var space := get_world_3d().direct_space_state
+	var qf := PhysicsRayQueryParameters3D.create(global_position + Vector3(0, 0.25, 0), global_position + Vector3(0, 0.25, 0) + dir * 0.6)
+	qf.exclude = [get_rid()]
+	qf.collision_mask = 1
+	if space.intersect_ray(qf).is_empty():
+		return
+	var ahead := global_position + dir * 0.55
 	var q := PhysicsRayQueryParameters3D.create(ahead + Vector3(0, 1.4, 0), ahead + Vector3(0, 0.02, 0))
 	q.exclude = [get_rid()]
 	q.collision_mask = 1
@@ -111,7 +126,7 @@ func _step_assist() -> void:
 	if hit.is_empty():
 		return
 	var rise: float = hit["position"].y - global_position.y
-	if rise > 0.08 and rise <= 0.55:
+	if rise > 0.08 and rise <= 0.62:
 		global_position.y = hit["position"].y + 0.02
 
 func eye_pos() -> Vector3:
@@ -154,6 +169,10 @@ func _physics_process(dt: float) -> void:
 	move_and_slide()
 	_step_assist()
 	rotation.y = yaw
+	var want_h := 1.3 if crouching else 1.75
+	if _cap_shape != null and absf(_cap_shape.height - want_h) > 0.01:
+		_cap_shape.height = want_h
+		_cap_col.position.y = want_h / 2.0
 	if rig != null:
 		rig.animate(Vector2(velocity.x, velocity.z).length(), crouching, now)
 
@@ -402,7 +421,10 @@ func take_damage(dmg: float, killer: Node = null, _hs: bool = false) -> void:
 		deaths += 1
 		visible = false
 		set_physics_process(false)
-		main.drop_weapon(self, weapon.duplicate(true))
+		main.drop_weapon(self, weapon)
+		weapon = Weapons.make("classic")
+		weapon["ammo"] = 0
+		weapon["reserve"] = 0
 		main.spawn_ragdoll(self, (global_position - (killer.global_position if killer != null and is_instance_valid(killer) else global_position)).normalized())
 		main.match_mgr.on_death(self, killer)
 
@@ -435,6 +457,13 @@ func _bot_buy() -> void:
 	elif money >= 400 and armor < 25:
 		money -= 400
 		armor = 25
+	# 补购 C/Q 技能充能（留 400 底金）
+	for k in ["c", "q"]:
+		var sl: Dictionary = ability_slots[k]
+		var d: Dictionary = sl["def"]
+		while d["cost"] > 0 and sl["n"] < d.get("max", 1) and money - d["cost"] >= 400:
+			money -= int(d["cost"])
+			sl["n"] += 1
 
 func _buy_wander(now: float) -> void:
 	# 购买阶段在出生区自由走动张望（web buyWander）

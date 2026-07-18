@@ -396,25 +396,41 @@ func hitscan(shooter: Node, origin: Vector3, dir: Vector3, def: Dictionary) -> v
 	var space := get_world_3d().direct_space_state
 	var to: Vector3 = origin + dir * float(def["range"]) * 2.0
 	var q := PhysicsRayQueryParameters3D.create(origin, to)
-	q.collision_mask = 1          # 子弹穿烟
+	q.collision_mask = 1 | 4 | 16          # 世界 + 部署物 + 角色（子弹穿烟）
 	q.exclude = [shooter.get_rid()]
 	var hit := space.intersect_ray(q)
 	if hit.is_empty():
 		return
 	var col: Object = hit["collider"]
 	_tracer(origin + dir * 0.8, hit["position"])
+	# 枪声情报：28m 内的敌方 bot 获知射手方位
+	if "team" in shooter:
+		for b in bots:
+			if b.alive and b.team != shooter.team and b.target == null \
+					and b.global_position.distance_to(origin) < 28.0:
+				b.last_seen = shooter.global_position
+	if col is Node and col.has_meta("device"):
+		damage_device(col, def["dmg"]["b"])
+		spawn_particles(hit["position"], Color(0.9, 0.7, 0.3), 6, 2.5, 0.25)
+		if shooter == player:
+			sfx.play("hit")
+		return
 	if col is CharacterBody3D and "team" in col and col.team != shooter.team:
 		var rel_y: float = hit["position"].y - col.global_position.y
+		var crouched: bool = ("crouching" in col) and col.crouching
 		var part := "l"
-		if rel_y > 1.45: part = "h"
+		if crouched:
+			if rel_y > 1.02: part = "h"
+			elif rel_y > 0.6: part = "b"
+		elif rel_y > 1.45: part = "h"
 		elif rel_y > 0.85: part = "b"
 		var dmg: float = def["dmg"][part]
 		var dist := origin.distance_to(hit["position"])
-		for tier in def.get("fall", []):
+		for tier in def.get("tiers", []):
 			if dist > float(tier[0]):
-				dmg = def["dmg"][part] * float(tier[1])
+				dmg = tier[1][part]
 		if dist > float(def["range"]):
-			dmg = minf(dmg, def["dmg"][part] * 0.6)
+			dmg *= 0.85
 		spawn_particles(hit["position"], Color(0.8, 0.15, 0.15), 10, 3.0, 0.35)
 		if shooter == player:
 			sfx.play("headshot" if part == "h" else "hit")
@@ -770,8 +786,52 @@ func spawn_firewall(ent: Node, pos: Vector3, dir: Vector3) -> void:
 		spawn_zone(ent, p, 1.5, 6.0, 30.0)
 
 # ---------------- 装置（炮塔/信标/警报/蜂群/封锁） ----------------
+func spawn_slow_zone(owner: Node, pos: Vector3, r: float, dur: float) -> void:
+	var z := spawn_zone(owner, pos, r, dur, 0.0)
+	if z is Dictionary:
+		z["slow"] = true
+
+func send_seeker(owner: Node, target: Node) -> void:
+	# 追猎之灵：2.4 秒后命中目标——显形+眩晕+减速（对齐网页版 seekers）
+	spawn_particles(target.global_position + Vector3(0, 0.5, 0), Color(0.62, 0.88, 0.54), 10, 2.0, 0.8)
+	var wrt: WeakRef = weakref(target)
+	get_tree().create_timer(2.4).timeout.connect(func():
+		var f: Node = wrt.get_ref()
+		if f == null or not f.alive or not can_fight():
+			return
+		f.revealed_until = maxf(f.revealed_until, now() + 4.0)
+		f.daze_until = maxf(f.daze_until, now() + 2.2)
+		f.slow_until = maxf(f.slow_until, now() + 2.2)
+		spawn_particles(f.global_position + Vector3(0, 1.2, 0), Color(0.62, 0.88, 0.54), 16, 3.0, 0.5)
+		if f == player:
+			hud.dazed(1.5))
+
+func damage_device(node: Node, dmg: float) -> void:
+	for i in range(devices.size() - 1, -1, -1):
+		var d: Dictionary = devices[i]
+		if d["node"] == node:
+			d["hp"] = d.get("hp", 40.0) - dmg
+			if d["hp"] <= 0:
+				explosion_fx(node.global_position, 0.9, Color(1.0, 0.7, 0.3))
+				sfx.play("hit", player.global_position.distance_to(node.global_position))
+				node.queue_free()
+				devices.remove_at(i)
+			return
+
 func spawn_device(owner: Node, kind: String, pos: Vector3) -> void:
-	var node := MeshInstance3D.new()
+	var node := StaticBody3D.new()
+	node.collision_layer = 4
+	node.collision_mask = 0
+	node.set_meta("device", true)
+	var cs := CollisionShape3D.new()
+	var bs := BoxShape3D.new()
+	bs.size = Vector3(0.6, 0.9, 0.6)
+	cs.shape = bs
+	cs.position = Vector3(0, 0.45, 0)
+	node.add_child(cs)
+	var mi_dev := MeshInstance3D.new()
+	node.add_child(mi_dev)
+	var node_mesh := mi_dev
 	var col: Color = Color(0.25, 0.85, 0.8) if owner.team == "ally" else Color(1.0, 0.3, 0.35)
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = Color(0.6, 0.66, 0.7)
@@ -786,13 +846,15 @@ func spawn_device(owner: Node, kind: String, pos: Vector3) -> void:
 			var cm := CylinderMesh.new(); cm.top_radius = 0.1; cm.bottom_radius = 0.14; cm.height = 0.9; mesh = cm
 		"lockdown":
 			var cm2 := CylinderMesh.new(); cm2.top_radius = 0.55; cm2.bottom_radius = 0.7; cm2.height = 1.1; mesh = cm2
+		"trap":
+			var tm := BoxMesh.new(); tm.size = Vector3(1.6, 0.08, 0.08); mesh = tm
 		_:
 			var sm := SphereMesh.new(); sm.radius = 0.22; sm.height = 0.44; mesh = sm
 	mesh.surface_set_material(0, mat) if mesh.get_surface_count() > 0 else null
-	node.mesh = mesh
-	node.material_override = mat
+	mi_dev.mesh = mesh
+	mi_dev.position = Vector3(0, 0.35, 0)
 	add_child(node)
-	node.global_position = pos + Vector3(0, 0.4, 0)
+	node.global_position = pos
 	devices.append({ "kind": kind, "pos": pos, "owner": owner, "team": owner.team, "node": node,
 		"until": now() + (45.0 if kind == "turret" else (10.0 if kind == "beacon" else 90.0)),
 		"arm_at": now() + 8.0 if kind == "lockdown" else 0.0, "hp": 125.0, "next_fire": 0.0 })
@@ -855,6 +917,19 @@ func _tick_devices(dt: float) -> void:
 						_tracer(d["pos"] + Vector3(0, 0.8, 0), e.eye_pos())
 						if randf() < 0.78:
 							e.take_damage(7.0, d["owner"], false)
+						break
+			"trap":
+				for e in combatants():
+					if e.alive and e.team != d["team"] and e.global_position.distance_to(d["pos"]) < 2.2:
+						e.revealed_until = maxf(e.revealed_until, now() + 4.0)
+						e.daze_until = maxf(e.daze_until, now() + 2.2)
+						e.slow_until = maxf(e.slow_until, now() + 2.2)
+						explosion_fx(d["pos"] + Vector3(0, 0.5, 0), 1.2, Color(0.85, 0.82, 0.6))
+						sfx.play("flash_pop", player.global_position.distance_to(d["pos"]))
+						if e == player:
+							hud.dazed(1.5)
+						e.take_damage(12.0, d["owner"], false)
+						d["until"] = 0.0
 						break
 			"beacon":
 				for e in combatants():

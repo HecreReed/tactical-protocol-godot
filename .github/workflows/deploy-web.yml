@@ -28,13 +28,14 @@ jobs:
 
       - name: Smoke test (headless autostart, fail on script errors)
         run: |
-          TP_AUTOSTART=yiji timeout 300 ./Godot_v4.6-stable_linux.x86_64 --headless --path . --quit-after 3000 2>&1 | tee /tmp/smoke.log || true
-          if grep -q "SCRIPT ERROR" /tmp/smoke.log; then
+          TP_AUTOSTART=yiji timeout 600 ./Godot_v4.6-stable_linux.x86_64 --headless --path . --quit-after 9000 2>&1 | tee /tmp/smoke.log
+          if grep -qE "SCRIPT ERROR|Failed to load script|Parse Error" /tmp/smoke.log; then
             echo "::error::Script errors detected in smoke test"
-            grep -A2 "SCRIPT ERROR" /tmp/smoke.log | head -40
+            grep -B1 -A3 -E "SCRIPT ERROR|Failed to load script" /tmp/smoke.log | head -60
             exit 1
           fi
           grep -q "\[BOOT\] menu built" /tmp/smoke.log || (echo "::error::Game did not boot" && exit 1)
+          grep -q "\[TP\] t=8" /tmp/smoke.log || (echo "::error::Match loop did not run" && exit 1)
 
       - name: Export Web
         run: |

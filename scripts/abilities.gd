@@ -57,6 +57,21 @@ const AGENTS := {
 		"q":{"name":"电光闪雷","cost":250,"max":2,"type":"flash_throw"},
 		"e":{"name":"零点压制刃","cost":0,"max":1,"cd":0.0,"type":"suppress_throw"},
 		"x":{"name":"湮灭脉冲","type":"null_pulse"} },
+	"yinglie": { "role":"哨卫", "desc":"情报大师·绊网囚笼监控全场", "name":"影猎", "color":Color8(0xd8,0xd0,0xb8), "ult_cost":7,
+		"c": { "name":"诡雷绊网", "cost":200, "max":2, "type":"tripwire" },
+		"q": { "name":"暗网囚笼", "cost":100, "max":2, "type":"cage" },
+		"e": { "name":"幽灵之眼", "cost":0, "max":1, "cd":30.0, "type":"drone_scan" },
+		"x": { "name":"窃梦神偷", "cost":0, "max":1, "type":"reveal_all" } },
+	"meiying": { "role":"决斗者", "desc":"嗜杀女皇·击杀吞噬回血遁形", "name":"魅影", "color":Color8(0xc4,0x5a,0xd0), "ult_cost":7,
+		"c": { "name":"魅惑之眼", "cost":250, "max":1, "type":"paranoia" },
+		"q": { "name":"吞噬", "cost":200, "max":2, "type":"devour" },
+		"e": { "name":"虚空遁形", "cost":0, "max":1, "cd":26.0, "type":"dismiss" },
+		"x": { "name":"女皇仪式", "cost":0, "max":1, "type":"empress" } },
+	"lingyu": { "role":"先锋", "desc":"自然向导·群疗闪光追猎开路", "name":"灵愈", "color":Color8(0x9f,0xe0,0x8a), "ult_cost":8,
+		"c": { "name":"再生之种", "cost":200, "max":1, "cd":22.0, "type":"heal" },
+		"q": { "name":"引导之光", "cost":250, "max":2, "type":"flash_throw" },
+		"e": { "name":"开拓猛虎", "cost":0, "max":1, "cd":30.0, "type":"boom_bot" },
+		"x": { "name":"追猎之灵", "cost":0, "max":1, "type":"seekers" } },
 }
 
 # 投掷类：由 RigidBody3D 真实物理弹跳后触发
@@ -68,7 +83,7 @@ static func make_slots(agent_id: String) -> Dictionary:
 	var slots := {}
 	for k in ["c", "q", "e"]:
 		var d: Dictionary = a[k]
-		slots[k] = { "def": d, "n": 1 if (d["cost"] == 0 or k != "q") else 1, "cd_until": 0.0 }
+		slots[k] = { "def": d, "n": d.get("start", 1), "cd_until": 0.0 }
 	slots["x"] = { "def": a["x"], "n": 0, "cd_until": 0.0 }
 	return slots
 
@@ -171,6 +186,42 @@ static func cast(main: Node3D, ent: Node, key: String) -> bool:
 			"null_pulse":
 				main.suppress_burst(ent.global_position, 16.0, 6.0, ent)
 				ent.stim_until = now + 8.0
+			"tripwire":
+				main.spawn_device(ent, "trap", ent.global_position + Vector3(dir.x, 0, dir.z).normalized() * 6.0)
+			"cage":
+				var cp: Vector3 = ent.global_position + Vector3(dir.x, 0, dir.z).normalized() * 20.0
+				main.spawn_smoke(cp, 3.4, 8.0)
+				main.spawn_slow_zone(ent, cp, 3.4, 8.0)
+				if key == "e": slot["cd_until"] = now + def.get("cd", 30.0)
+			"devour":
+				if now - ent.last_kill_at > 6.0 or ent.hp >= 100.0:
+					used = false
+				else:
+					ent.hp = minf(100.0, ent.hp + 80.0)
+					main.spawn_particles(ent.global_position + Vector3(0, 1.2, 0), Color(0.77, 0.35, 0.82), 16, 2.0, 0.6)
+			"dismiss":
+				var dv := Vector3(ent.velocity.x, 0, ent.velocity.z)
+				if dv.length() < 2.0: dv = Vector3(dir.x, 0, dir.z)
+				dv = dv.normalized()
+				ent.velocity = dv * 18.0
+				ent.resist_until = maxf(ent.resist_until, now + 1.2)
+				main.spawn_particles(ent.global_position + Vector3(0, 1, 0), Color(0.77, 0.35, 0.82), 20, 3.0, 0.5)
+				if key == "e": slot["cd_until"] = now + def.get("cd", 26.0)
+			"empress":
+				ent.empress_until = now + 14.0
+				ent.stim_until = maxf(ent.stim_until, now + 14.0)
+				ent.hp = minf(100.0, ent.hp + 30.0)
+			"seekers":
+				var foes: Array = []
+				for e in main.combatants():
+					if e.alive and e.team != ent.team:
+						foes.append(e)
+				foes.sort_custom(func(a, b): return a.global_position.distance_to(ent.global_position) < b.global_position.distance_to(ent.global_position))
+				if foes.is_empty():
+					used = false
+				else:
+					for f in foes.slice(0, 3):
+						main.send_seeker(ent, f)
 			"knife_ult":
 				ent.knife_ult = 5
 			"rocket_ult":

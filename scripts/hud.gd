@@ -442,10 +442,15 @@ func _buy_input(ev: InputEvent, id: String) -> void:
 	var def: Dictionary = Weapons.LIST[id]
 	if ev.button_index == MOUSE_BUTTON_LEFT:
 		var refund := 0
-		if p.primary.size() > 0 and def["cat"] != "pistol" and bought_this_round.has(p.primary["id"]):
+		if def["cat"] != "pistol" and p.primary.size() > 0 and bought_this_round.has(p.primary["id"]):
 			refund = p.primary["def"]["cost"]
+		elif def["cat"] == "pistol" and p.secondary.size() > 0 and bought_this_round.has(p.secondary["id"]):
+			refund = p.secondary["def"]["cost"]
 		if p.money + refund < def["cost"]:
+			main.sfx.play("deny")
 			return
+		if refund > 0:
+			bought_this_round.erase(p.primary["id"] if def["cat"] != "pistol" and p.primary.size() > 0 else p.secondary["id"])
 		p.money += refund - def["cost"]
 		bought_this_round.append(id)
 		if def["cat"] == "pistol":
@@ -471,20 +476,29 @@ func _buy_input(ev: InputEvent, id: String) -> void:
 			if p.slot == "secondary": p.weapon = p.secondary
 	_refresh_buy()
 
+var armor_prev := -1
+var armor_paid := 0
+
 func _armor_input(ev: InputEvent, heavy: bool) -> void:
 	var p = main.player
 	var cost := 1000 if heavy else 400
 	var val := 50 if heavy else 25
 	if ev.button_index == MOUSE_BUTTON_LEFT:
 		if p.money < cost or p.armor >= val:
+			main.sfx.play("deny")
 			return
+		if armor_prev < 0:
+			armor_prev = p.armor
 		p.money -= cost
+		armor_paid += cost
 		p.armor = val
-		p.armor_bought_round = main.match_mgr.round_no
-	elif ev.button_index == MOUSE_BUTTON_RIGHT and p.armor_bought_round == main.match_mgr.round_no:
-		p.money = mini(9000, p.money + (1000 if p.armor == 50 else 400))
-		p.armor = 0
-		p.armor_bought_round = -1
+		main.sfx.play("buy")
+	elif ev.button_index == MOUSE_BUTTON_RIGHT and armor_paid > 0:
+		# 卖甲：退回本回合累计花费，恢复购买前护甲
+		p.money = mini(9000, p.money + armor_paid)
+		p.armor = armor_prev
+		armor_paid = 0
+		armor_prev = -1
 	_refresh_buy()
 
 func _ability_input(ev: InputEvent, k: String) -> void:
@@ -526,10 +540,25 @@ func toggle_buy() -> void:
 func on_round_start() -> void:
 	bought_this_round.clear()
 	ab_bought = { "c": 0, "q": 0 }
+	armor_prev = -1
+	armor_paid = 0
 	if buy_open:
 		_refresh_buy()
 
 # ---------------- 暂停 / 设置（复刻网页版设置面板） ----------------
+func _load_settings() -> Dictionary:
+	var cfg := ConfigFile.new()
+	if cfg.load("user://settings.cfg") == OK:
+		return { "sens": cfg.get_value("s", "sens", 1.0), "fov": cfg.get_value("s", "fov", 71.0), "vol": cfg.get_value("s", "vol", 0.8) }
+	return { "sens": 1.0, "fov": 71.0, "vol": 0.8 }
+
+func _save_settings() -> void:
+	var cfg := ConfigFile.new()
+	cfg.set_value("s", "sens", main.player.sens_mult)
+	cfg.set_value("s", "fov", main.player.fov_base)
+	cfg.set_value("s", "vol", main.sfx.volume)
+	cfg.save("user://settings.cfg")
+
 func _build_pause() -> void:
 	pause_panel = PanelContainer.new()
 	pause_panel.set_anchors_preset(Control.PRESET_CENTER)
@@ -542,9 +571,13 @@ func _build_pause() -> void:
 	v.add_theme_constant_override("separation", 14)
 	pause_panel.add_child(v)
 	var title := _lbl(v, 20, C_WHITE, "设 置")
-	_mk_slider(v, "灵敏度", 0.2, 3.0, 1.0, func(val): main.player.sens_mult = val)
-	_mk_slider(v, "视野 FOV", 60.0, 100.0, 71.0, func(val): main.player.fov_base = val)
-	_mk_slider(v, "音量", 0.0, 1.0, 0.8, func(val): main.sfx.volume = val)
+	var st := _load_settings()
+	main.player.sens_mult = st["sens"]
+	main.player.fov_base = st["fov"]
+	main.sfx.volume = st["vol"]
+	_mk_slider(v, "灵敏度", 0.2, 3.0, st["sens"], func(val): main.player.sens_mult = val)
+	_mk_slider(v, "视野 FOV", 60.0, 100.0, st["fov"], func(val): main.player.fov_base = val)
+	_mk_slider(v, "音量", 0.0, 1.0, st["vol"], func(val): main.sfx.volume = val)
 	var dr := HBoxContainer.new()
 	dr.add_theme_constant_override("separation", 6)
 	v.add_child(dr)
@@ -563,7 +596,9 @@ func _build_pause() -> void:
 	closeb.add_theme_font_size_override("font_size", 14)
 	closeb.add_theme_color_override("font_color", Color8(0x06, 0x22, 0x2a))
 	closeb.add_theme_stylebox_override("normal", _sb(C_TEAL, C_TEAL, 1))
-	closeb.pressed.connect(func(): toggle_pause())
+	closeb.pressed.connect(func():
+		_save_settings()
+		toggle_pause())
 	v.add_child(closeb)
 
 func _mk_slider(parent: Node, name_txt: String, mn: float, mx: float, val: float, on_change: Callable) -> void:
