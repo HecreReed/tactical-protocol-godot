@@ -9,6 +9,8 @@ const HudScript := preload("res://scripts/hud.gd")
 const SfxScript := preload("res://scripts/sfx.gd")
 const Weapons := preload("res://scripts/weapons.gd")
 const Ab := preload("res://scripts/abilities.gd")
+const Runtime := preload("res://scripts/ability_runtime.gd")
+const Mechanics := preload("res://scripts/agent_mechanics.gd")
 
 var map: Node3D
 var player: CharacterBody3D
@@ -23,6 +25,10 @@ var zones: Array = []       # {pos,r,until,dps,slow,heal_owner,owner,mesh}
 var smokes: Array = []      # {pos,r,until,mesh,body}
 var devices: Array = []     # {kind,pos,owner,team,node,until,arm_at,hp,next_fire}
 var drops: Array = []       # {body, weapon}
+var ability_events: Array = []
+var utility_store: Dictionary = Runtime.create_utility_store()
+var control_state := {"control_mode": null}
+var active_projectiles: Array = []
 var sel_map_id := ""
 var observer := false
 var sfx: Node
@@ -410,7 +416,7 @@ func hitscan(shooter: Node, origin: Vector3, dir: Vector3, def: Dictionary) -> v
 					and b.global_position.distance_to(origin) < 28.0:
 				b.last_seen = shooter.global_position
 	if col is Node and col.has_meta("device"):
-		damage_device(col, def["dmg"]["b"])
+		damage_device(col, def["dmg"]["b"], shooter.team)
 		spawn_particles(hit["position"], Color(0.9, 0.7, 0.3), 6, 2.5, 0.25)
 		if shooter == player:
 			sfx.play("hit")
@@ -471,11 +477,18 @@ func throw_grenade(shooter: Node, kind: String, origin: Vector3, dir: Vector3) -
 	body.linear_velocity = dir * 21.0 + Vector3.UP * 3.0
 	body.angular_velocity = Vector3(randf_range(-8, 8), randf_range(-8, 8), 0)
 	var fuse := 1.15 if kind != "flash_throw" else 0.55
+	active_projectiles.append({
+		"body": body,
+		"team": shooter.team,
+		"owner": shooter,
+		"kind": kind,
+		"interceptable": true,
+	})
 	var wr: WeakRef = weakref(body)
-	get_tree().create_timer(fuse).timeout.connect(func():
+	Runtime.schedule_ability_event(ability_events, now() + fuse, func():
 		var b: Node = wr.get_ref()
 		if b != null:
-			_grenade_pop(b, kind, shooter))
+			_grenade_pop(b, kind, shooter), "projectile-fuse")
 
 func _kind_color(kind: String) -> Color:
 	match kind:
@@ -494,6 +507,7 @@ func _grenade_pop(body: RigidBody3D, kind: String, shooter: Node) -> void:
 	if not is_instance_valid(body):
 		return
 	var pos := body.global_position
+	_remove_active_projectile(body)
 	body.queue_free()
 	match kind:
 		"smoke_throw":
@@ -523,6 +537,66 @@ func _grenade_pop(body: RigidBody3D, kind: String, shooter: Node) -> void:
 			reveal_area(pos, 16.0, shooter)
 		"nano_throw":
 			spawn_device(shooter, "nano", pos)
+		"fragNade":
+			explode(shooter, pos, 4.0, 75.0, 30.0)
+		"bignade":
+			explode(shooter, pos, 4.2, 70.0, 30.0)
+			for offset in [Vector3(2.2, 0, 0), Vector3(-2.2, 0, 0), Vector3(0, 0, 2.2), Vector3(0, 0, -2.2)]:
+				var cluster_pos: Vector3 = pos + offset
+				Runtime.schedule_ability_event(ability_events, now() + 0.35, func():
+					explode(shooter, cluster_pos, 2.8, 50.0, 20.0), "cluster")
+		"neonRelayBolt":
+			_apply_area_status(pos, 5.0, shooter, "daze_until", 3.0)
+		"deadlockGravNet":
+			spawn_slow_zone(shooter, pos, 4.5, 6.0)
+		"cloveMeddle":
+			_apply_area_status(pos, 5.0, shooter, "slow_until", 4.0, 70.0)
+		"gekkoMosh":
+			spawn_zone(shooter, pos, 5.0, 4.0, 45.0)
+		"tejoDelivery":
+			explode(shooter, pos, 4.0, 70.0, 25.0)
+		"vetoChokehold":
+			_apply_area_status(pos, 4.5, shooter, "daze_until", 3.0)
+		"vyseRazorvine":
+			var razor := spawn_zone(shooter, pos, 4.5, 8.0, 18.0)
+			razor["slow"] = true
+		"waylaySaturate":
+			_apply_area_status(pos, 5.0, shooter, "slow_until", 5.0)
+
+func _remove_active_projectile(body: Node) -> void:
+	for index in range(active_projectiles.size() - 1, -1, -1):
+		if active_projectiles[index].get("body") == body:
+			active_projectiles.remove_at(index)
+
+func _tick_active_projectiles() -> void:
+	for index in range(active_projectiles.size() - 1, -1, -1):
+		var projectile: Dictionary = active_projectiles[index]
+		var body: Node = projectile.get("body")
+		if not is_instance_valid(body):
+			active_projectiles.remove_at(index)
+			continue
+		projectile["pos"] = body.global_position
+		if Runtime.intercept_projectile(utility_store, projectile):
+			explosion_fx(body.global_position, 0.8, Color(0.35, 0.9, 0.75))
+			body.queue_free()
+			active_projectiles.remove_at(index)
+
+func _apply_area_status(
+	pos: Vector3,
+	radius: float,
+	owner: Node,
+	status: String,
+	duration: float,
+	hp_cap: float = 0.0,
+) -> void:
+	for entity in combatants():
+		if not entity.alive or entity.team == owner.team:
+			continue
+		if entity.global_position.distance_to(pos) > radius or Mechanics.is_debuff_immune(entity, now()):
+			continue
+		entity.set(status, maxf(float(entity.get(status)), now() + duration))
+		if hp_cap > 0.0:
+			entity.hp = minf(entity.hp, hp_cap)
 
 # ---------------- 烟雾（AI 视线遮断 + 玩家进烟遮罩） ----------------
 func spawn_smoke(pos: Vector3, r: float, dur: float) -> void:
@@ -611,6 +685,8 @@ func flash_burst(pos: Vector3, shooter: Node) -> void:
 			continue
 		if not has_los(pos, ent.eye_pos(), [shooter, ent]):
 			continue
+		if Mechanics.is_debuff_immune(ent, now()):
+			continue
 		var dur := clampf(1.9 - d * 0.05, 0.4, 1.9)
 		ent.flash_until = maxf(ent.flash_until, now() + dur)
 		if ent == player:
@@ -623,6 +699,8 @@ func suppress_burst(pos: Vector3, r: float, dur: float, owner: Node) -> void:
 			continue
 		if owner != null and ent.team == owner.team:
 			continue
+		if Mechanics.is_debuff_immune(ent, now()):
+			continue
 		if ent.global_position.distance_to(pos) < r:
 			ent.suppressed_until = maxf(ent.suppressed_until, now() + dur)
 
@@ -630,6 +708,8 @@ func cone_blind(ent: Node, dist: float, dot_min: float, dur: float) -> void:
 	var f: Vector3 = ent.aim_dir()
 	for e in combatants():
 		if not e.alive or e.team == ent.team:
+			continue
+		if Mechanics.is_debuff_immune(e, now()):
 			continue
 		var to: Vector3 = e.global_position - ent.global_position
 		var d: float = to.length()
@@ -646,6 +726,8 @@ func cone_daze(ent: Node, dist: float, dot_min: float, dur: float) -> void:
 	for e in combatants():
 		if not e.alive or e.team == ent.team:
 			continue
+		if Mechanics.is_debuff_immune(e, now()):
+			continue
 		var to: Vector3 = e.global_position - ent.global_position
 		var d: float = to.length()
 		if d > dist:
@@ -658,9 +740,9 @@ func cone_daze(ent: Node, dist: float, dot_min: float, dur: float) -> void:
 
 func delayed_quake(ent: Node, p: Vector3) -> void:
 	spawn_zone(ent, p, 3.4, 0.65, 0.0)
-	get_tree().create_timer(0.65).timeout.connect(func():
+	Runtime.schedule_ability_event(ability_events, now() + 0.65, func():
 		if can_fight():
-			explode(ent, Vector3(p.x, 0.5, p.z), 3.4, 60.0, 40.0))
+			explode(ent, Vector3(p.x, 0.5, p.z), 3.4, 60.0, 40.0), "quake")
 
 func teleport_forward(ent: Node, dist: float) -> void:
 	var f: Vector3 = ent.aim_dir()
@@ -673,15 +755,42 @@ func teleport_forward(ent: Node, dist: float) -> void:
 	var t := dist
 	if not hit.is_empty():
 		t = ent.eye_pos().distance_to(hit["position"]) - 0.8
+	var destination: Vector3 = ent.global_position + d2 * maxf(1.0, t)
+	if not _valid_teleport_destination(ent, destination):
+		return
 	spawn_particles(ent.global_position, Color(0.54, 0.44, 0.85), 20, 4.0, 0.5)
-	ent.global_position += d2 * maxf(1.0, t)
+	ent.global_position = destination
 	spawn_particles(ent.global_position, Color(0.54, 0.44, 0.85), 20, 4.0, 0.5)
 
 func teleport_site(ent: Node) -> void:
 	var plant: Vector3 = map.sites[match_mgr.plan_site]["plant"]
+	var destination: Vector3 = plant + Vector3(0, 0.2, 0)
+	for attempt in range(8):
+		var candidate: Vector3 = plant + Vector3(randf_range(-2, 2), 0.2, randf_range(-2, 2))
+		if _valid_teleport_destination(ent, candidate):
+			destination = candidate
+			break
+	if not _valid_teleport_destination(ent, destination):
+		return
 	spawn_particles(ent.global_position, Color(0.54, 0.44, 0.85), 26, 5.0, 0.6)
-	ent.global_position = plant + Vector3(randf_range(-2, 2), 0.2, randf_range(-2, 2))
+	ent.global_position = destination
 	spawn_particles(ent.global_position, Color(0.54, 0.44, 0.85), 26, 5.0, 0.6)
+
+func _valid_teleport_destination(ent: Node, destination: Vector3) -> bool:
+	return Runtime.valid_teleport_destination(
+		destination,
+		func(point): return map._in_open(map.md["open"], point.x, point.z),
+		func(point):
+			var capsule := CapsuleShape3D.new()
+			capsule.radius = 0.42
+			capsule.height = 1.8
+			var query := PhysicsShapeQueryParameters3D.new()
+			query.shape = capsule
+			query.transform = Transform3D(Basis.IDENTITY, point + Vector3.UP * 0.9)
+			query.collision_mask = 1 | 8
+			query.exclude = [ent.get_rid()]
+			return not get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty(),
+	)
 
 func smoke_site_chokes(ent: Node) -> void:
 	# 玩家：烟落在准星指向的落点（单发单点，对齐无畏契约天穹）；AI：轮流封锁计划点烟位
@@ -715,10 +824,10 @@ func orbital_strike(ent: Node, origin: Vector3, dir: Vector3) -> void:
 	var p: Vector3 = hit["position"] if not hit.is_empty() else origin + dir * 40.0
 	p.y = 0
 	var z := spawn_zone(ent, p, 5.5, 2.6, 0.0)
-	get_tree().create_timer(2.6).timeout.connect(func():
+	Runtime.schedule_ability_event(ability_events, now() + 2.6, func():
 		if can_fight():
 			var zz := spawn_zone(ent, p, 5.5, 2.2, 150.0)
-			explosion_fx(Vector3(p.x, 1, p.z), 5.5, Color(1.0, 0.85, 0.3)))
+			explosion_fx(Vector3(p.x, 1, p.z), 5.5, Color(1.0, 0.85, 0.3)), "orbital")
 
 func toxic_wall(ent: Node, dir: Vector3) -> void:
 	var d2 := Vector3(dir.x, 0, dir.z).normalized()
@@ -806,12 +915,18 @@ func send_seeker(owner: Node, target: Node) -> void:
 		if f == player:
 			hud.dazed(1.5))
 
-func damage_device(node: Node, dmg: float) -> void:
+func damage_device(node: Node, dmg: float, source_team: Variant = null) -> void:
 	for i in range(devices.size() - 1, -1, -1):
 		var d: Dictionary = devices[i]
 		if d["node"] == node:
-			d["hp"] = d.get("hp", 40.0) - dmg
-			if d["hp"] <= 0:
+			if source_team != null and d["team"] == source_team:
+				return
+			var utility: Dictionary = d.get("utility", {})
+			var destroyed := Runtime.damage_utility(
+				utility_store, String(utility.get("id", "")), dmg, source_team,
+			)
+			d["hp"] = float(utility.get("hp", d.get("hp", 40.0)))
+			if destroyed:
 				explosion_fx(node.global_position, 0.9, Color(1.0, 0.7, 0.3))
 				sfx.play("hit", player.global_position.distance_to(node.global_position))
 				node.queue_free()
@@ -824,9 +939,14 @@ func spawn_device(owner: Node, kind: String, pos: Vector3) -> void:
 	node.collision_mask = 0
 	node.set_meta("device", true)
 	var cs := CollisionShape3D.new()
-	var bs := BoxShape3D.new()
-	bs.size = Vector3(0.6, 0.9, 0.6)
-	cs.shape = bs
+	if kind == "cove":
+		var sphere_shape := SphereShape3D.new()
+		sphere_shape.radius = 3.8
+		cs.shape = sphere_shape
+	else:
+		var box_shape := BoxShape3D.new()
+		box_shape.size = Vector3(0.6, 0.9, 0.6)
+		cs.shape = box_shape
 	cs.position = Vector3(0, 0.45, 0)
 	node.add_child(cs)
 	var mi_dev := MeshInstance3D.new()
@@ -848,6 +968,8 @@ func spawn_device(owner: Node, kind: String, pos: Vector3) -> void:
 			var cm2 := CylinderMesh.new(); cm2.top_radius = 0.55; cm2.bottom_radius = 0.7; cm2.height = 1.1; mesh = cm2
 		"trap":
 			var tm := BoxMesh.new(); tm.size = Vector3(1.6, 0.08, 0.08); mesh = tm
+		"cove":
+			var cove_mesh := SphereMesh.new(); cove_mesh.radius = 3.8; cove_mesh.height = 7.6; mesh = cove_mesh
 		_:
 			var sm := SphereMesh.new(); sm.radius = 0.22; sm.height = 0.44; mesh = sm
 	mesh.surface_set_material(0, mat) if mesh.get_surface_count() > 0 else null
@@ -855,9 +977,22 @@ func spawn_device(owner: Node, kind: String, pos: Vector3) -> void:
 	mi_dev.position = Vector3(0, 0.35, 0)
 	add_child(node)
 	node.global_position = pos
+	var lifetime := 12.0 if kind == "cove" else (45.0 if kind in ["turret", "interceptor"] else (10.0 if kind == "beacon" else 90.0))
+	var hp := 500.0 if kind == "cove" else 125.0
+	var utility := Runtime.register_utility(utility_store, {
+		"type": "cove-shield" if kind == "cove" else kind,
+		"team": owner.team,
+		"owner_id": owner.get_instance_id(),
+		"hp": hp,
+		"pos": pos,
+		"radius": 8.0 if kind == "interceptor" else (3.8 if kind == "cove" else 0.8),
+		"until": now() + lifetime,
+		"recallable": kind in ["turret", "interceptor"],
+		"blocks_bullets": kind == "cove",
+	})
 	devices.append({ "kind": kind, "pos": pos, "owner": owner, "team": owner.team, "node": node,
-		"until": now() + (45.0 if kind == "turret" else (10.0 if kind == "beacon" else 90.0)),
-		"arm_at": now() + 8.0 if kind == "lockdown" else 0.0, "hp": 125.0, "next_fire": 0.0 })
+		"until": now() + lifetime, "arm_at": now() + 8.0 if kind == "lockdown" else 0.0,
+		"hp": hp, "next_fire": 0.0, "utility": utility })
 
 func spawn_boom_bot(ent: Node, dir: Vector3) -> void:
 	var d2 := Vector3(dir.x, 0, dir.z).normalized()
@@ -877,8 +1012,11 @@ func spawn_drone(ent: Node, dir: Vector3) -> void:
 	node.mesh = bm
 	add_child(node)
 	node.global_position = ent.eye_pos() + dir * 1.0
-	devices.append({ "kind": "drone", "pos": node.global_position, "owner": ent, "team": ent.team,
-		"node": node, "until": now() + 3.6, "arm_at": 0.0, "hp": 40.0, "next_fire": 0.0, "vel": dir * 8.0 })
+	var drone := { "kind": "drone", "pos": node.global_position, "owner": ent, "team": ent.team,
+		"node": node, "until": now() + 3.6, "arm_at": 0.0, "hp": 40.0, "next_fire": 0.0, "vel": dir * 8.0 }
+	devices.append(drone)
+	if ent == player:
+		Runtime.begin_control(control_state, ent, drone, now() + 3.6)
 
 func _tick_devices(dt: float) -> void:
 	for i in range(devices.size() - 1, -1, -1):
@@ -888,6 +1026,8 @@ func _tick_devices(dt: float) -> void:
 				explode(d["owner"], d["pos"], 3.4, 70.0, 30.0)
 			if is_instance_valid(d["node"]):
 				d["node"].queue_free()
+			if control_state.get("control_mode") is Dictionary and control_state["control_mode"].get("unit") == d:
+				Runtime.end_control(control_state)
 			devices.remove_at(i)
 			continue
 		match d["kind"]:
@@ -1136,6 +1276,8 @@ func clear_round_fx() -> void:
 	for c in get_children():
 		if c is RigidBody3D:
 			c.queue_free()
+	active_projectiles.clear()
+	Runtime.clear_round_state(ability_events, utility_store, control_state)
 
 var _trm: StandardMaterial3D = null
 func _tracer_mat() -> StandardMaterial3D:
@@ -1154,6 +1296,9 @@ func _physics_process(dt: float) -> void:
 	_t += dt
 	if not started:
 		return
+	Runtime.run_ability_events(ability_events, now())
+	Runtime.tick_utilities(utility_store, now())
+	_tick_active_projectiles()
 	# 区域效果
 	for i in range(zones.size() - 1, -1, -1):
 		var z: Dictionary = zones[i]
@@ -1172,6 +1317,8 @@ func _physics_process(dt: float) -> void:
 			if owner != null and is_instance_valid(owner) and "team" in owner and owner.team == e.team:
 				if z["heal_owner"] and owner == e:
 					e.hp = minf(100.0, e.hp + 13.0 * dt)
+				continue
+			if Mechanics.is_debuff_immune(e, now()):
 				continue
 			if z["slow"]:
 				e.slow_until = now() + 0.3

@@ -229,6 +229,36 @@ static func on_death(entity: Variant, now: float) -> void:
 	if _agent_id(entity) == "clove":
 		_state(entity)["clove_death_until"] = now + 30.0
 
+static func resolve_damage(entity: Variant, amount: float, now: float) -> Dictionary:
+	var incoming := maxf(0.0, amount)
+	var result := {
+		"incoming": incoming,
+		"applied": 0.0,
+		"absorbed": 0.0,
+		"blocked": false,
+		"prevented": false,
+		"killed": false,
+	}
+	if incoming <= 0.0:
+		return result
+	if consume_iso_shield(entity):
+		result["blocked"] = true
+		return result
+	if now < float(_read_value(entity, "resist_until", 0.0)):
+		incoming *= 0.55
+	var armor := float(_read_value(entity, "armor", 0.0))
+	var absorbed := minf(armor, incoming * 0.66)
+	var applied := incoming - absorbed
+	_write_value(entity, "armor", maxf(0.0, armor - absorbed))
+	_write_value(entity, "hp", float(_read_value(entity, "hp", 0.0)) - applied)
+	result["absorbed"] = absorbed
+	result["applied"] = applied
+	if float(_read_value(entity, "hp", 0.0)) <= 0.0:
+		var fatality := resolve_fatality(entity, now)
+		result["prevented"] = bool(fatality.get("prevented", false))
+		result["killed"] = not result["prevented"]
+	return result
+
 static func reclaim_gekko_globule(entity: Variant, key: String, now: float) -> bool:
 	var globules: Dictionary = _resources(entity).get("globules", {})
 	var globule: Dictionary = globules.get(key, {})

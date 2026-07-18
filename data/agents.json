@@ -1,5 +1,5 @@
 {
-  "sourceCommit": "73f9c5a154b918cdd2655776d307ebfd4babd477",
+  "sourceCommit": "f01cae1c3a55b8f3bd6c601b09663b3042b04d06",
   "sourceDirty": false,
   "agents": [
     {
@@ -1667,12 +1667,17 @@
     "huanjie",
     "sixiang",
     "chongqing",
-    "tianshu"
+    "tianshu",
+    "yunque",
+    "chaomen",
+    "chilian",
+    "jingcheng",
+    "longji"
   ],
   "summary": {
     "agents": 29,
     "abilities": 116,
     "media": 145,
-    "maps": 11
+    "maps": 16
   }
 }

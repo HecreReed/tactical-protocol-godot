@@ -1,5 +1,5 @@
 # map_builder.gd — 从 data/maps.json 构建战场（几何/碰撞/导航/点位/光幕）
-# 与网页版共用同一份地图数据：10 张图 1:1 复刻
+# 与网页版共用同一份地图数据：16 张图 1:1 复刻
 class_name MapBuilder
 extends Node3D
 
@@ -33,7 +33,8 @@ static func load_all() -> Dictionary:
 const FLOOR_THEME := {
 	"chongqing": "terrace", "liexia": "terrace", "xuefeng": "snow", "gumiao": "tile",
 	"yiji": "stone", "santa": "tile", "huanjie": "asphalt", "rongcheng": "asphalt",
-	"sixiang": "tile", "tiangang": "deck"
+	"sixiang": "tile", "tiangang": "deck", "yunque": "tile", "chaomen": "deck",
+	"chilian": "deck", "jingcheng": "asphalt", "longji": "terrace"
 }
 
 static func _mat_tex(tex: ImageTexture, tint: Color, tile_m: float, rough: float, metal: float = 0.0) -> StandardMaterial3D:

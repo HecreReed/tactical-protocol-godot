@@ -126,6 +126,14 @@ static func end_control(state: Dictionary) -> Variant:
 	state["control_mode"] = null
 	return owner
 
+static func clear_round_state(queue: Array, utility_store: Dictionary, control_state: Dictionary) -> void:
+	queue.clear()
+	var items: Array = utility_store.get("items", [])
+	for utility in items.duplicate():
+		_remove_utility(utility_store, utility, "round-cleanup")
+	utility_store["next_id"] = 1
+	control_state["control_mode"] = null
+
 static func valid_teleport_destination(
 	point: Variant, in_bounds: Callable, blocked: Callable,
 ) -> bool:

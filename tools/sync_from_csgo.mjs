@@ -36,6 +36,9 @@ const mapPresentation = {
   gumiao: ['temple', '#cabd9e'], huanjie: ['city', '#9aa0a8'],
   sixiang: ['temple', '#b8b0a0'], chongqing: ['mountain', '#b7a894'],
   tianshu: ['city', '#a9b0bc'],
+  yunque: ['temple', '#aeb3a6'], chaomen: ['harbor', '#82999c'],
+  chilian: ['harbor', '#777b7d'], jingcheng: ['city', '#929da3'],
+  longji: ['mountain', '#92958a'],
 };
 
 const normalizeMap = (source) => {
@@ -82,7 +85,7 @@ if (implementations.length !== 116) {
 if (new Set(implementations).size !== implementations.length) {
   throw new Error('ability implementation ids are not unique');
 }
-if (MAPS.length !== 11) throw new Error(`expected 11 maps, found ${MAPS.length}`);
+if (MAPS.length !== 16) throw new Error(`expected 16 maps, found ${MAPS.length}`);
 
 const sourceAssets = resolve(csgoDir, 'assets/agents');
 const expectedMedia = agents.flatMap((agent) => [
@@ -112,7 +115,7 @@ const catalog = {
   sourceDirty,
   agents,
   maps: MAPS.map((map) => map.id),
-  summary: { agents: 29, abilities: 116, media: 145, maps: 11 },
+  summary: { agents: 29, abilities: 116, media: 145, maps: 16 },
 };
 const maps = { world: WORLD, maps: MAPS.map(normalizeMap) };
 

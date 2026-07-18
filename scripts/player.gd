@@ -19,8 +19,8 @@ var ability_state: Dictionary = {}
 var resources: Dictionary = {}
 var ult_points := 0
 var hp := 100.0
-var armor := 0
-var armor_max := 0
+var armor := 0.0
+var armor_max := 0.0
 var armor_bought_round := -1
 var money := 800
 var team := "ally"
@@ -322,6 +322,12 @@ func _physics_process(dt: float) -> void:
 		cam.rotation = Vector3(pitch, 0, 0)
 	var now: float = main.now()
 	Mechanics.tick(self, now, dt)
+	if bool(ability_state.get("force_death", false)) or hp <= 0.0:
+		ability_state.erase("force_death")
+		hp = maxf(hp, 1.0)
+		take_damage(999.0, null, false)
+		if not alive:
+			return
 	var cap := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
 	if cap and not _was_captured:
 		mouse_ignore_until = now + 0.15
@@ -537,14 +543,17 @@ func _start_reload() -> void:
 func take_damage(dmg: float, killer: Node = null, _hs: bool = false) -> void:
 	if not alive:
 		return
-	if main.now() < resist_until:
-		dmg *= 0.55
-	var absorb: float = minf(armor, dmg * 0.66)
-	armor -= int(absorb)
-	hp -= dmg - absorb
+	var result := Mechanics.resolve_damage(self, dmg, main.now())
+	if bool(result["blocked"]):
+		main.spawn_particles(global_position + Vector3.UP, Color(0.55, 0.45, 1.0), 18, 3.0, 0.35)
+		return
+	if killer != null and is_instance_valid(killer):
+		main.match_mgr.record_damage(killer, self, float(result["applied"]))
 	main.hud.damaged()
 	main.sfx.play("hurt")
-	if hp <= 0:
+	if bool(result["prevented"]):
+		return
+	if bool(result["killed"]):
 		alive = false
 		deaths += 1
 		visible = false
@@ -561,6 +570,7 @@ func revive_at(pos: Vector3) -> void:
 	hp = 100
 	visible = true
 	global_position = pos
+	channel = ""
 
 func revive_reset(pos: Vector3) -> void:
 	alive = true

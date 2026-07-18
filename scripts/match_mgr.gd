@@ -1,6 +1,8 @@
 # match_mgr.gd — 回合循环：购买/交战/下包/拆包/结算/换边/经济
 extends Node
 
+const Mechanics := preload("res://scripts/agent_mechanics.gd")
+
 const Weapons := preload("res://scripts/weapons.gd")
 
 const ROUND_TIME := 100.0
@@ -286,7 +288,9 @@ func record_damage(attacker: Node, victim: Node, dmg: float) -> void:
 		_report_dealt[nm] = _report_dealt.get(nm, 0.0) + dmg
 
 func on_death(ent: Node, killer: Node) -> void:
+	Mechanics.on_death(ent, now())
 	if killer != null and is_instance_valid(killer) and killer != ent:
+		Mechanics.on_kill(killer, ent, now())
 		killer.kills += 1
 		killer.ult_points = mini(9, killer.ult_points + 1)
 		if "last_kill_at" in killer:

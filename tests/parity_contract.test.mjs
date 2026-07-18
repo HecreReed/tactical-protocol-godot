@@ -31,6 +31,9 @@ const mapPresentation = {
   gumiao: ['temple', '#cabd9e'], huanjie: ['city', '#9aa0a8'],
   sixiang: ['temple', '#b8b0a0'], chongqing: ['mountain', '#b7a894'],
   tianshu: ['city', '#a9b0bc'],
+  yunque: ['temple', '#aeb3a6'], chaomen: ['harbor', '#82999c'],
+  chilian: ['harbor', '#777b7d'], jingcheng: ['city', '#929da3'],
+  longji: ['mountain', '#92958a'],
 };
 const normalizeMap = (source) => {
   const { sky, roomRects: _roomRects, ...map } = source;
@@ -58,7 +61,7 @@ test('generated Godot catalog matches the current csgo source', () => {
   assert.equal(generated.agents.flatMap((agent) => Object.values(agent.ab)).length, 116);
   assert.deepEqual(generated.agents.map((agent) => agent.id), AGENT_LIST);
   assert.deepEqual(generated.maps, upstreamMaps.map((map) => map.id));
-  assert.deepEqual(generated.summary, { agents: 29, abilities: 116, media: 145, maps: 11 });
+  assert.deepEqual(generated.summary, { agents: 29, abilities: 116, media: 145, maps: 16 });
 
   const implementations = [];
   for (const agent of generated.agents) {
@@ -104,7 +107,7 @@ test('generated Godot maps match all current upstream maps', () => {
   const generated = readJson(resolve(repoRoot, 'data/maps.json'));
 
   assert.equal(generated.world, upstreamWorld);
-  assert.equal(generated.maps.length, 11);
+  assert.equal(generated.maps.length, 16);
   assert.deepEqual(generated.maps.map((map) => map.id), upstreamMaps.map((map) => map.id));
   assert.deepEqual(generated.maps, upstreamMaps.map(normalizeMap));
 });

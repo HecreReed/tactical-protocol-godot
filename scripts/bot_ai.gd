@@ -75,8 +75,8 @@ var spawn_anchor := Vector3.ZERO
 var assault_role := "entry"
 var loot_until := 0.0
 var money := 800
-var armor := 0
-var armor_max := 0
+var armor := 0.0
+var armor_max := 0.0
 var heal_queue := 0.0
 var speed_mul := 1.0
 var bought_round := -1
@@ -161,6 +161,13 @@ func _physics_process(dt: float) -> void:
 	if not alive:
 		return
 	var now: float = main.now()
+	Mechanics.tick(self, now, dt)
+	if bool(ability_state.get("force_death", false)) or hp <= 0.0:
+		ability_state.erase("force_death")
+		hp = maxf(hp, 1.0)
+		take_damage(999.0, null, false)
+		if not alive:
+			return
 	if now >= next_think:
 		next_think = now + 0.15
 		_think(now)
@@ -319,7 +326,7 @@ func _navigate(dt: float, now: float) -> void:
 	dir.y = 0
 	if dir.length() > 0.05:
 		dir = dir.normalized()
-		var spd: float = SPEED * CAT_SPEED.get(weapon["def"]["cat"], 1.0)
+		var spd: float = SPEED * speed_mul * CAT_SPEED.get(weapon["def"]["cat"], 1.0)
 		if now < slow_until: spd *= 0.45
 		if now < daze_until: spd *= 0.6
 		if now < stim_until: spd *= 1.12
@@ -348,8 +355,8 @@ func _combat(dt: float, now: float) -> void:
 	yaw = lerp_angle(yaw, atan2(-(aim_p.x - global_position.x), -(aim_p.z - global_position.z)), minf(1.0, dt * aim_spd))
 	if dry:
 		var adv_dir := (target.global_position - global_position).normalized()
-		velocity.x = (adv_dir.x + right.x * strafe_dir * 0.4) * SPEED * 1.12
-		velocity.z = (adv_dir.z + right.z * strafe_dir * 0.4) * SPEED * 1.12
+		velocity.x = (adv_dir.x + right.x * strafe_dir * 0.4) * SPEED * speed_mul * 1.12
+		velocity.z = (adv_dir.z + right.z * strafe_dir * 0.4) * SPEED * speed_mul * 1.12
 		crouching = false
 		if not main.can_fight():
 			return
@@ -363,7 +370,7 @@ func _combat(dt: float, now: float) -> void:
 	crouching = firing and d > 22 and main.difficulty > 0.75
 	var want_stand: bool = weapon["def"].get("scope", false) or d > 35 or (firing and d > 8)
 	if not want_stand and channel == "":
-		var spd: float = SPEED * CAT_SPEED.get(weapon["def"]["cat"], 1.0) * 0.7
+		var spd: float = SPEED * speed_mul * CAT_SPEED.get(weapon["def"]["cat"], 1.0) * 0.7
 		velocity.x = right.x * strafe_dir * spd
 		velocity.z = right.z * strafe_dir * spd
 	else:
@@ -400,19 +407,19 @@ func _combat(dt: float, now: float) -> void:
 		next_fire = now + weapon["def"]["rl"]
 		# 换弹拉开距离
 		var away := (global_position - target.global_position).normalized()
-		var rspd: float = SPEED * CAT_SPEED.get(weapon["def"]["cat"], 1.0) * 0.85
+		var rspd: float = SPEED * speed_mul * CAT_SPEED.get(weapon["def"]["cat"], 1.0) * 0.85
 		velocity.x = (away.x * 0.8 + right.x * strafe_dir * 0.5) * rspd
 		velocity.z = (away.z * 0.8 + right.z * strafe_dir * 0.5) * rspd
 
 func take_damage(dmg: float, killer: Node = null, _hs: bool = false) -> void:
 	if not alive:
 		return
-	if main.now() < resist_until:
-		dmg *= 0.55
-	var absorb: float = minf(armor, dmg * 0.66)
-	armor -= int(absorb)
-	dmg -= absorb
-	hp -= dmg
+	var result := Mechanics.resolve_damage(self, dmg, main.now())
+	if bool(result["blocked"]):
+		main.spawn_particles(global_position + Vector3.UP, Color(0.55, 0.45, 1.0), 18, 3.0, 0.35)
+		return
+	if killer != null and is_instance_valid(killer):
+		main.match_mgr.record_damage(killer, self, float(result["applied"]))
 	last_hurt_at = main.now()
 	# 受击反应：没有目标时转向攻击者并短暂追击
 	if hp > 0 and killer != null and is_instance_valid(killer) and "team" in killer and killer.team != team:
@@ -423,7 +430,9 @@ func take_damage(dmg: float, killer: Node = null, _hs: bool = false) -> void:
 			hunt_until = main.now() + 4.0
 			state = "hunt"
 			set_goal(kp)
-	if hp <= 0:
+	if bool(result["prevented"]):
+		return
+	if bool(result["killed"]):
 		alive = false
 		deaths += 1
 		visible = false
@@ -489,8 +498,8 @@ func _buy_wander(now: float) -> void:
 		else:
 			var dn := d.normalized()
 			yaw = lerp_angle(yaw, atan2(-dn.x, -dn.y), 0.1)
-			velocity.x = dn.x * SPEED * 0.42
-			velocity.z = dn.y * SPEED * 0.42
+			velocity.x = dn.x * SPEED * speed_mul * 0.42
+			velocity.z = dn.y * SPEED * speed_mul * 0.42
 			return
 	velocity.x *= 0.8
 	velocity.z *= 0.8

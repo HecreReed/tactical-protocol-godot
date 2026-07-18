@@ -14,6 +14,7 @@ func _init() -> void:
 	_test_utility_runtime()
 	_test_agent_mechanics()
 	_test_cast_contracts()
+	_test_combat_and_round_integration()
 	if failures == 0:
 		print("PASS: %d checks" % checks)
 	else:
@@ -26,7 +27,7 @@ func _test_catalog() -> void:
 	assert_eq(ids[0], "astra", "catalog preserves upstream order")
 	assert_eq(ids[-1], "yoru", "catalog includes latest tail agent")
 	assert_eq(Catalog.all_abilities().size(), 116, "official ability count")
-	assert_eq(Catalog.map_ids().size(), 11, "official map count")
+	assert_eq(Catalog.map_ids().size(), 16, "official map count")
 	assert_eq(Catalog.agent("kayo")["name"], "KAY/O", "official display name")
 	assert_eq(Catalog.ability("astra", "e")["type"], "astraNebula", "ability lookup")
 	assert_true(FileAccess.file_exists(Catalog.agent("jett")["portrait"]), "portrait is local")
@@ -392,6 +393,42 @@ func _test_cast_contracts() -> void:
 		null, actor, "q", 50.0, func(_w, _e, _k, _d, _a): return true,
 	), "Bot cast uses common commit path")
 	assert_eq(actor["ability_slots"]["q"]["n"], 1, "successful Bot cast spends one charge")
+
+func _test_combat_and_round_integration() -> void:
+	var iso := _actor("iso")
+	iso["ability_state"]["iso_shield"] = true
+	var shielded := Mechanics.resolve_damage(iso, 150.0, 10.0)
+	assert_true(shielded["blocked"], "Iso shield blocks one complete damage instance")
+	assert_eq(iso["hp"], 100.0, "Iso shield preserves hp")
+	var lethal := Mechanics.resolve_damage(iso, 150.0, 11.0)
+	assert_true(lethal["killed"], "unshielded lethal damage kills")
+
+	var armored := _actor("sage")
+	armored["armor"] = 50.0
+	armored["armor_max"] = 50.0
+	var armored_hit := Mechanics.resolve_damage(armored, 60.0, 1.0)
+	assert_eq(armored_hit["absorbed"], 39.6, "armor absorbs configured damage share")
+	assert_eq(armored["hp"], 79.6, "armor leaves remainder for hp")
+
+	var phoenix := _actor("phoenix")
+	phoenix["pos"] = Vector3(2, 0, 3)
+	Mechanics.activate_return_anchor(phoenix, 20.0)
+	phoenix["pos"] = Vector3(20, 0, 20)
+	var returned := Mechanics.resolve_damage(phoenix, 200.0, 10.0)
+	assert_true(returned["prevented"], "Phoenix fatality hook runs inside damage resolver")
+	assert_false(returned["killed"], "Phoenix return is not a death")
+	assert_eq(phoenix["pos"], Vector3(2, 0, 3), "damage resolver restores Phoenix anchor")
+
+	var queue: Array = []
+	Runtime.schedule_ability_event(queue, 5.0, func(): pass)
+	var utility_store := Runtime.create_utility_store()
+	Runtime.register_utility(utility_store, {"type": "turret", "team": "ally"})
+	var control_state := {"control_mode": {"owner": 1, "unit": 2}}
+	Runtime.clear_round_state(queue, utility_store, control_state)
+	assert_eq(queue, [], "round cleanup clears scheduled gameplay events")
+	assert_eq(utility_store["items"], [], "round cleanup clears runtime utility")
+	assert_eq(utility_store["next_id"], 1, "round cleanup resets stable id sequence")
+	assert_eq(control_state["control_mode"], null, "round cleanup ends controlled unit mode")
 
 func _actor(agent_id: String) -> Dictionary:
 	return {

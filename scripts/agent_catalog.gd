@@ -74,8 +74,8 @@ static func validation_errors() -> Array[String]:
 	var ids := agent_ids()
 	if ids.size() != 29:
 		errors.append("expected 29 agents, found %d" % ids.size())
-	if map_ids().size() != 11:
-		errors.append("expected 11 maps")
+	if map_ids().size() != 16:
+		errors.append("expected 16 maps")
 
 	var seen_agents := {}
 	var seen_impls := {}
