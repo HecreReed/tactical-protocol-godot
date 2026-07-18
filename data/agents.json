@@ -1,0 +1,1678 @@
+{
+  "sourceCommit": "73f9c5a154b918cdd2655776d307ebfd4babd477",
+  "sourceDirty": false,
+  "agents": [
+    {
+      "id": "astra",
+      "name": "Astra",
+      "role": "Controller",
+      "color": "#7f66d9",
+      "ultCost": 7,
+      "desc": "Harness the cosmos with reusable stars.",
+      "portrait": "res://assets/agents/astra/portrait.webp",
+      "ab": {
+        "c": {
+          "name": "Gravity Well",
+          "type": "astraGravity",
+          "impl": "astra-c-gravity-well",
+          "cost": 150,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "control",
+          "icon": "res://assets/agents/astra/c.png"
+        },
+        "q": {
+          "name": "Nova Pulse",
+          "type": "astraNova",
+          "impl": "astra-q-nova-pulse",
+          "cost": 150,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "control",
+          "icon": "res://assets/agents/astra/q.png"
+        },
+        "e": {
+          "name": "Nebula / Dissipate",
+          "type": "astraNebula",
+          "impl": "astra-e-nebula-dissipate",
+          "cost": 0,
+          "max": 2,
+          "start": 2,
+          "cd": 25,
+          "intent": "entry",
+          "icon": "res://assets/agents/astra/e.png",
+          "free": true
+        },
+        "x": {
+          "name": "Astral Form / Cosmic Divide",
+          "type": "astraDivide",
+          "impl": "astra-x-astral-form-cosmic-divide",
+          "cost": 0,
+          "max": 1,
+          "start": 0,
+          "cd": 0,
+          "intent": "ultimate",
+          "icon": "res://assets/agents/astra/x.png",
+          "free": true
+        }
+      }
+    },
+    {
+      "id": "breach",
+      "name": "Breach",
+      "role": "Initiator",
+      "color": "#d8a75a",
+      "ultCost": 9,
+      "desc": "Blast through terrain to disrupt entrenched enemies.",
+      "portrait": "res://assets/agents/breach/portrait.webp",
+      "ab": {
+        "c": {
+          "name": "Aftershock",
+          "type": "quake",
+          "impl": "breach-c-aftershock",
+          "cost": 200,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "entry",
+          "icon": "res://assets/agents/breach/c.png"
+        },
+        "q": {
+          "name": "Flashpoint",
+          "type": "wallFlash",
+          "impl": "breach-q-flashpoint",
+          "cost": 250,
+          "max": 2,
+          "start": 1,
+          "cd": 0,
+          "intent": "cover",
+          "icon": "res://assets/agents/breach/q.png"
+        },
+        "e": {
+          "name": "Fault Line",
+          "type": "stunWave",
+          "impl": "breach-e-fault-line",
+          "cost": 0,
+          "max": 1,
+          "start": 1,
+          "cd": 40,
+          "intent": "control",
+          "icon": "res://assets/agents/breach/e.png",
+          "free": true
+        },
+        "x": {
+          "name": "Rolling Thunder",
+          "type": "bigStun",
+          "impl": "breach-x-rolling-thunder",
+          "cost": 0,
+          "max": 1,
+          "start": 0,
+          "cd": 0,
+          "intent": "ultimate",
+          "icon": "res://assets/agents/breach/x.png",
+          "free": true
+        }
+      }
+    },
+    {
+      "id": "brimstone",
+      "name": "Brimstone",
+      "role": "Controller",
+      "color": "#f5c56b",
+      "ultCost": 8,
+      "desc": "Deliver precise orbital utility from a tactical map.",
+      "portrait": "res://assets/agents/brimstone/portrait.webp",
+      "ab": {
+        "c": {
+          "name": "Stim Beacon",
+          "type": "stimBeacon",
+          "impl": "brimstone-c-stim-beacon",
+          "cost": 200,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "entry",
+          "icon": "res://assets/agents/brimstone/c.png"
+        },
+        "q": {
+          "name": "Incendiary",
+          "type": "molly",
+          "impl": "brimstone-q-incendiary",
+          "cost": 250,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "damage",
+          "icon": "res://assets/agents/brimstone/q.png"
+        },
+        "e": {
+          "name": "Sky Smoke",
+          "type": "smokeSky",
+          "impl": "brimstone-e-sky-smoke",
+          "cost": 0,
+          "max": 3,
+          "start": 3,
+          "cd": 19.25,
+          "intent": "cover",
+          "icon": "res://assets/agents/brimstone/e.png",
+          "free": true
+        },
+        "x": {
+          "name": "Orbital Strike",
+          "type": "orbital",
+          "impl": "brimstone-x-orbital-strike",
+          "cost": 0,
+          "max": 1,
+          "start": 0,
+          "cd": 0,
+          "intent": "ultimate",
+          "icon": "res://assets/agents/brimstone/x.png",
+          "free": true
+        }
+      }
+    },
+    {
+      "id": "chamber",
+      "name": "Chamber",
+      "role": "Sentinel",
+      "color": "#d8b45a",
+      "ultCost": 8,
+      "desc": "Hold long angles with bespoke weapons and a teleport anchor.",
+      "portrait": "res://assets/agents/chamber/portrait.webp",
+      "ab": {
+        "c": {
+          "name": "Trademark",
+          "type": "chamberTrademark",
+          "impl": "chamber-c-trademark",
+          "cost": 200,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "setup",
+          "icon": "res://assets/agents/chamber/c.png"
+        },
+        "q": {
+          "name": "Headhunter",
+          "type": "chamberHeadhunter",
+          "impl": "chamber-q-headhunter",
+          "cost": 100,
+          "max": 8,
+          "start": 0,
+          "cd": 0,
+          "intent": "weapon",
+          "icon": "res://assets/agents/chamber/q.png"
+        },
+        "e": {
+          "name": "Rendezvous",
+          "type": "chamberRendezvous",
+          "impl": "chamber-e-rendezvous",
+          "cost": 0,
+          "max": 1,
+          "start": 1,
+          "cd": 30,
+          "intent": "escape",
+          "icon": "res://assets/agents/chamber/e.png",
+          "free": true
+        },
+        "x": {
+          "name": "Tour De Force",
+          "type": "chamberTourDeForce",
+          "impl": "chamber-x-tour-de-force",
+          "cost": 0,
+          "max": 1,
+          "start": 0,
+          "cd": 0,
+          "intent": "ultimate",
+          "icon": "res://assets/agents/chamber/x.png",
+          "free": true
+        }
+      }
+    },
+    {
+      "id": "clove",
+      "name": "Clove",
+      "role": "Controller",
+      "color": "#e48ac5",
+      "ultCost": 8,
+      "desc": "Fight beyond death with smokes, decay, and a self-revive.",
+      "portrait": "res://assets/agents/clove/portrait.webp",
+      "ab": {
+        "c": {
+          "name": "Pick-me-up",
+          "type": "clovePickMeUp",
+          "impl": "clove-c-pick-me-up",
+          "cost": 200,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "heal",
+          "icon": "res://assets/agents/clove/c.png"
+        },
+        "q": {
+          "name": "Meddle",
+          "type": "cloveMeddle",
+          "impl": "clove-q-meddle",
+          "cost": 250,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "control",
+          "icon": "res://assets/agents/clove/q.png"
+        },
+        "e": {
+          "name": "Ruse",
+          "type": "cloveRuse",
+          "impl": "clove-e-ruse",
+          "cost": 0,
+          "max": 2,
+          "start": 2,
+          "cd": 30,
+          "intent": "entry",
+          "icon": "res://assets/agents/clove/e.png",
+          "free": true
+        },
+        "x": {
+          "name": "Not Dead Yet",
+          "type": "cloveRevive",
+          "impl": "clove-x-not-dead-yet",
+          "cost": 0,
+          "max": 1,
+          "start": 0,
+          "cd": 0,
+          "intent": "ultimate",
+          "icon": "res://assets/agents/clove/x.png",
+          "free": true
+        }
+      }
+    },
+    {
+      "id": "cypher",
+      "name": "Cypher",
+      "role": "Sentinel",
+      "color": "#d8d0b8",
+      "ultCost": 6,
+      "desc": "Watch the map through traps, cages, and a remote camera.",
+      "portrait": "res://assets/agents/cypher/portrait.webp",
+      "ab": {
+        "c": {
+          "name": "Trapwire",
+          "type": "cypherTrapwire",
+          "impl": "cypher-c-trapwire",
+          "cost": 200,
+          "max": 2,
+          "start": 1,
+          "cd": 0,
+          "intent": "setup",
+          "icon": "res://assets/agents/cypher/c.png"
+        },
+        "q": {
+          "name": "Cyber Cage",
+          "type": "cypherCage",
+          "impl": "cypher-q-cyber-cage",
+          "cost": 100,
+          "max": 2,
+          "start": 1,
+          "cd": 0,
+          "intent": "cover",
+          "icon": "res://assets/agents/cypher/q.png"
+        },
+        "e": {
+          "name": "Spycam",
+          "type": "cypherSpycam",
+          "impl": "cypher-e-spycam",
+          "cost": 0,
+          "max": 1,
+          "start": 1,
+          "cd": 30,
+          "intent": "info",
+          "icon": "res://assets/agents/cypher/e.png",
+          "free": true
+        },
+        "x": {
+          "name": "Neural Theft",
+          "type": "cypherNeuralTheft",
+          "impl": "cypher-x-neural-theft",
+          "cost": 0,
+          "max": 1,
+          "start": 0,
+          "cd": 0,
+          "intent": "ultimate",
+          "icon": "res://assets/agents/cypher/x.png",
+          "free": true
+        }
+      }
+    },
+    {
+      "id": "deadlock",
+      "name": "Deadlock",
+      "role": "Sentinel",
+      "color": "#e0b8c8",
+      "ultCost": 7,
+      "desc": "Fortify sites with reactive sensors and nanowire.",
+      "portrait": "res://assets/agents/deadlock/portrait.webp",
+      "ab": {
+        "c": {
+          "name": "GravNet",
+          "type": "deadlockGravNet",
+          "impl": "deadlock-c-gravnet",
+          "cost": 200,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "control",
+          "icon": "res://assets/agents/deadlock/c.png"
+        },
+        "q": {
+          "name": "Sonic Sensor",
+          "type": "deadlockSensor",
+          "impl": "deadlock-q-sonic-sensor",
+          "cost": 200,
+          "max": 2,
+          "start": 1,
+          "cd": 0,
+          "intent": "setup",
+          "icon": "res://assets/agents/deadlock/q.png"
+        },
+        "e": {
+          "name": "Barrier Mesh",
+          "type": "deadlockBarrier",
+          "impl": "deadlock-e-barrier-mesh",
+          "cost": 0,
+          "max": 1,
+          "start": 1,
+          "cd": 40,
+          "intent": "setup",
+          "icon": "res://assets/agents/deadlock/e.png",
+          "free": true
+        },
+        "x": {
+          "name": "Annihilation",
+          "type": "deadlockAnnihilation",
+          "impl": "deadlock-x-annihilation",
+          "cost": 0,
+          "max": 1,
+          "start": 0,
+          "cd": 0,
+          "intent": "ultimate",
+          "icon": "res://assets/agents/deadlock/x.png",
+          "free": true
+        }
+      }
+    },
+    {
+      "id": "fade",
+      "name": "Fade",
+      "role": "Initiator",
+      "color": "#6a5acd",
+      "ultCost": 8,
+      "desc": "Track enemies with nightmares, tethers, and prowlers.",
+      "portrait": "res://assets/agents/fade/portrait.webp",
+      "ab": {
+        "c": {
+          "name": "Prowler",
+          "type": "fadeProwler",
+          "impl": "fade-c-prowler",
+          "cost": 250,
+          "max": 2,
+          "start": 1,
+          "cd": 0,
+          "intent": "info",
+          "icon": "res://assets/agents/fade/c.png"
+        },
+        "q": {
+          "name": "Seize",
+          "type": "fadeSeize",
+          "impl": "fade-q-seize",
+          "cost": 200,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "control",
+          "icon": "res://assets/agents/fade/q.png"
+        },
+        "e": {
+          "name": "Haunt",
+          "type": "fadeHaunt",
+          "impl": "fade-e-haunt",
+          "cost": 0,
+          "max": 1,
+          "start": 1,
+          "cd": 40,
+          "intent": "info",
+          "icon": "res://assets/agents/fade/e.png",
+          "free": true
+        },
+        "x": {
+          "name": "Nightfall",
+          "type": "fadeNightfall",
+          "impl": "fade-x-nightfall",
+          "cost": 0,
+          "max": 1,
+          "start": 0,
+          "cd": 0,
+          "intent": "ultimate",
+          "icon": "res://assets/agents/fade/x.png",
+          "free": true
+        }
+      }
+    },
+    {
+      "id": "gekko",
+      "name": "Gekko",
+      "role": "Initiator",
+      "color": "#8bd450",
+      "ultCost": 7,
+      "desc": "Deploy a reclaimable crew of creatures.",
+      "portrait": "res://assets/agents/gekko/portrait.webp",
+      "ab": {
+        "c": {
+          "name": "Mosh Pit",
+          "type": "gekkoMosh",
+          "impl": "gekko-c-mosh-pit",
+          "cost": 250,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "damage",
+          "icon": "res://assets/agents/gekko/c.png"
+        },
+        "q": {
+          "name": "Wingman",
+          "type": "gekkoWingman",
+          "impl": "gekko-q-wingman",
+          "cost": 300,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "entry",
+          "icon": "res://assets/agents/gekko/q.png"
+        },
+        "e": {
+          "name": "Dizzy",
+          "type": "gekkoDizzy",
+          "impl": "gekko-e-dizzy",
+          "cost": 0,
+          "max": 1,
+          "start": 1,
+          "cd": 10,
+          "intent": "info",
+          "icon": "res://assets/agents/gekko/e.png",
+          "free": true
+        },
+        "x": {
+          "name": "Thrash",
+          "type": "gekkoThrash",
+          "impl": "gekko-x-thrash",
+          "cost": 0,
+          "max": 1,
+          "start": 0,
+          "cd": 0,
+          "intent": "ultimate",
+          "icon": "res://assets/agents/gekko/x.png",
+          "free": true
+        }
+      }
+    },
+    {
+      "id": "harbor",
+      "name": "Harbor",
+      "role": "Controller",
+      "color": "#3fa8a0",
+      "ultCost": 7,
+      "desc": "Shape water into moving cover and concussive waves.",
+      "portrait": "res://assets/agents/harbor/portrait.webp",
+      "ab": {
+        "c": {
+          "name": "Storm Surge",
+          "type": "harborStormSurge",
+          "impl": "harbor-c-storm-surge",
+          "cost": 200,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "control",
+          "icon": "res://assets/agents/harbor/c.png"
+        },
+        "q": {
+          "name": "High Tide",
+          "type": "harborHighTide",
+          "impl": "harbor-q-high-tide",
+          "cost": 300,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "cover",
+          "icon": "res://assets/agents/harbor/q.png"
+        },
+        "e": {
+          "name": "Cove",
+          "type": "harborCove",
+          "impl": "harbor-e-cove",
+          "cost": 0,
+          "max": 1,
+          "start": 1,
+          "cd": 40,
+          "intent": "cover",
+          "icon": "res://assets/agents/harbor/e.png",
+          "free": true
+        },
+        "x": {
+          "name": "Reckoning",
+          "type": "harborReckoning",
+          "impl": "harbor-x-reckoning",
+          "cost": 0,
+          "max": 1,
+          "start": 0,
+          "cd": 0,
+          "intent": "ultimate",
+          "icon": "res://assets/agents/harbor/x.png",
+          "free": true
+        }
+      }
+    },
+    {
+      "id": "iso",
+      "name": "Iso",
+      "role": "Duelist",
+      "color": "#6d5dfc",
+      "ultCost": 7,
+      "desc": "Create isolated duels and convert kills into shields.",
+      "portrait": "res://assets/agents/iso/portrait.webp",
+      "ab": {
+        "c": {
+          "name": "Contingency",
+          "type": "isoContingency",
+          "impl": "iso-c-contingency",
+          "cost": 250,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "cover",
+          "icon": "res://assets/agents/iso/c.png"
+        },
+        "q": {
+          "name": "Undercut",
+          "type": "isoUndercut",
+          "impl": "iso-q-undercut",
+          "cost": 200,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "control",
+          "icon": "res://assets/agents/iso/q.png"
+        },
+        "e": {
+          "name": "Double Tap",
+          "type": "isoDoubleTap",
+          "impl": "iso-e-double-tap",
+          "cost": 0,
+          "max": 1,
+          "start": 1,
+          "cd": 20,
+          "intent": "weapon",
+          "icon": "res://assets/agents/iso/e.png",
+          "free": true
+        },
+        "x": {
+          "name": "Kill Contract",
+          "type": "isoKillContract",
+          "impl": "iso-x-kill-contract",
+          "cost": 0,
+          "max": 1,
+          "start": 0,
+          "cd": 0,
+          "intent": "ultimate",
+          "icon": "res://assets/agents/iso/x.png",
+          "free": true
+        }
+      }
+    },
+    {
+      "id": "jett",
+      "name": "Jett",
+      "role": "Duelist",
+      "color": "#8fd3ff",
+      "ultCost": 8,
+      "desc": "Take space with wind-powered movement and knives.",
+      "portrait": "res://assets/agents/jett/portrait.webp",
+      "ab": {
+        "c": {
+          "name": "Cloudburst",
+          "type": "smokeProj",
+          "impl": "jett-c-cloudburst",
+          "cost": 200,
+          "max": 2,
+          "start": 1,
+          "cd": 0,
+          "intent": "cover",
+          "icon": "res://assets/agents/jett/c.png"
+        },
+        "q": {
+          "name": "Updraft",
+          "type": "updraft",
+          "impl": "jett-q-updraft",
+          "cost": 150,
+          "max": 2,
+          "start": 1,
+          "cd": 0,
+          "intent": "entry",
+          "icon": "res://assets/agents/jett/q.png"
+        },
+        "e": {
+          "name": "Tailwind",
+          "type": "jettTailwind",
+          "impl": "jett-e-tailwind",
+          "cost": 0,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "escape",
+          "icon": "res://assets/agents/jett/e.png",
+          "free": true
+        },
+        "x": {
+          "name": "Blade Storm",
+          "type": "knifeUlt",
+          "impl": "jett-x-blade-storm",
+          "cost": 0,
+          "max": 1,
+          "start": 0,
+          "cd": 0,
+          "intent": "ultimate",
+          "icon": "res://assets/agents/jett/x.png",
+          "free": true
+        }
+      }
+    },
+    {
+      "id": "kayo",
+      "name": "KAY/O",
+      "role": "Initiator",
+      "color": "#9fb4ff",
+      "ultCost": 8,
+      "desc": "Suppress enemy technology and lead explosive entries.",
+      "portrait": "res://assets/agents/kayo/portrait.webp",
+      "ab": {
+        "c": {
+          "name": "FRAG/ment",
+          "type": "fragNade",
+          "impl": "kayo-c-frag-ment",
+          "cost": 200,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "damage",
+          "icon": "res://assets/agents/kayo/c.png"
+        },
+        "q": {
+          "name": "FLASH/drive",
+          "type": "flash",
+          "impl": "kayo-q-flash-drive",
+          "cost": 250,
+          "max": 2,
+          "start": 1,
+          "cd": 0,
+          "intent": "control",
+          "icon": "res://assets/agents/kayo/q.png"
+        },
+        "e": {
+          "name": "ZERO/point",
+          "type": "suppressNade",
+          "impl": "kayo-e-zero-point",
+          "cost": 0,
+          "max": 1,
+          "start": 1,
+          "cd": 40,
+          "intent": "damage",
+          "icon": "res://assets/agents/kayo/e.png",
+          "free": true
+        },
+        "x": {
+          "name": "NULL/cmd",
+          "type": "kayoNullCmd",
+          "impl": "kayo-x-null-cmd",
+          "cost": 0,
+          "max": 1,
+          "start": 0,
+          "cd": 0,
+          "intent": "ultimate",
+          "icon": "res://assets/agents/kayo/x.png",
+          "free": true
+        }
+      }
+    },
+    {
+      "id": "killjoy",
+      "name": "Killjoy",
+      "role": "Sentinel",
+      "color": "#ffd447",
+      "ultCost": 9,
+      "desc": "Lock down territory with recallable autonomous devices.",
+      "portrait": "res://assets/agents/killjoy/portrait.webp",
+      "ab": {
+        "c": {
+          "name": "Nanoswarm",
+          "type": "nanoSwarm",
+          "impl": "killjoy-c-nanoswarm",
+          "cost": 200,
+          "max": 2,
+          "start": 1,
+          "cd": 0,
+          "intent": "setup",
+          "icon": "res://assets/agents/killjoy/c.png"
+        },
+        "q": {
+          "name": "ALARMBOT",
+          "type": "alarmBot",
+          "impl": "killjoy-q-alarmbot",
+          "cost": 200,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "setup",
+          "icon": "res://assets/agents/killjoy/q.png"
+        },
+        "e": {
+          "name": "TURRET",
+          "type": "turret",
+          "impl": "killjoy-e-turret",
+          "cost": 0,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "setup",
+          "icon": "res://assets/agents/killjoy/e.png",
+          "free": true
+        },
+        "x": {
+          "name": "Lockdown",
+          "type": "lockdown",
+          "impl": "killjoy-x-lockdown",
+          "cost": 0,
+          "max": 1,
+          "start": 0,
+          "cd": 0,
+          "intent": "ultimate",
+          "icon": "res://assets/agents/killjoy/x.png",
+          "free": true
+        }
+      }
+    },
+    {
+      "id": "miks",
+      "name": "Miks",
+      "role": "Controller",
+      "color": "#e562a7",
+      "ultCost": 8,
+      "desc": "Coordinate the team with smoke and sonic energy.",
+      "portrait": "res://assets/agents/miks/portrait.webp",
+      "ab": {
+        "c": {
+          "name": "M-pulse",
+          "type": "miksPulse",
+          "impl": "miks-c-m-pulse",
+          "cost": 200,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "control",
+          "icon": "res://assets/agents/miks/c.png"
+        },
+        "q": {
+          "name": "Harmonize",
+          "type": "miksHarmonize",
+          "impl": "miks-q-harmonize",
+          "cost": 200,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "heal",
+          "icon": "res://assets/agents/miks/q.png"
+        },
+        "e": {
+          "name": "Waveform",
+          "type": "miksWaveform",
+          "impl": "miks-e-waveform",
+          "cost": 0,
+          "max": 2,
+          "start": 2,
+          "cd": 30,
+          "intent": "entry",
+          "icon": "res://assets/agents/miks/e.png",
+          "free": true
+        },
+        "x": {
+          "name": "Bassquake",
+          "type": "miksBassquake",
+          "impl": "miks-x-bassquake",
+          "cost": 0,
+          "max": 1,
+          "start": 0,
+          "cd": 0,
+          "intent": "ultimate",
+          "icon": "res://assets/agents/miks/x.png",
+          "free": true
+        }
+      }
+    },
+    {
+      "id": "neon",
+      "name": "Neon",
+      "role": "Duelist",
+      "color": "#58b8ff",
+      "ultCost": 8,
+      "desc": "Spend energy to sprint, slide, and fire a lightning beam.",
+      "portrait": "res://assets/agents/neon/portrait.webp",
+      "ab": {
+        "c": {
+          "name": "Fast Lane",
+          "type": "neonFastLane",
+          "impl": "neon-c-fast-lane",
+          "cost": 300,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "cover",
+          "icon": "res://assets/agents/neon/c.png"
+        },
+        "q": {
+          "name": "Relay Bolt",
+          "type": "neonRelayBolt",
+          "impl": "neon-q-relay-bolt",
+          "cost": 200,
+          "max": 2,
+          "start": 1,
+          "cd": 0,
+          "intent": "entry",
+          "icon": "res://assets/agents/neon/q.png"
+        },
+        "e": {
+          "name": "High Gear",
+          "type": "neonHighGear",
+          "impl": "neon-e-high-gear",
+          "cost": 0,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "escape",
+          "icon": "res://assets/agents/neon/e.png",
+          "free": true
+        },
+        "x": {
+          "name": "Overdrive",
+          "type": "neonOverdrive",
+          "impl": "neon-x-overdrive",
+          "cost": 0,
+          "max": 1,
+          "start": 0,
+          "cd": 0,
+          "intent": "ultimate",
+          "icon": "res://assets/agents/neon/x.png",
+          "free": true
+        }
+      }
+    },
+    {
+      "id": "omen",
+      "name": "Omen",
+      "role": "Controller",
+      "color": "#8a6fd8",
+      "ultCost": 7,
+      "desc": "Blind through walls and teleport between shadows.",
+      "portrait": "res://assets/agents/omen/portrait.webp",
+      "ab": {
+        "c": {
+          "name": "Shrouded Step",
+          "type": "shadowStep",
+          "impl": "omen-c-shrouded-step",
+          "cost": 100,
+          "max": 2,
+          "start": 1,
+          "cd": 0,
+          "intent": "escape",
+          "icon": "res://assets/agents/omen/c.png"
+        },
+        "q": {
+          "name": "Paranoia",
+          "type": "paranoia",
+          "impl": "omen-q-paranoia",
+          "cost": 250,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "control",
+          "icon": "res://assets/agents/omen/q.png"
+        },
+        "e": {
+          "name": "Dark Cover",
+          "type": "smokeSky",
+          "impl": "omen-e-dark-cover",
+          "cost": 0,
+          "max": 2,
+          "start": 2,
+          "cd": 30,
+          "intent": "cover",
+          "icon": "res://assets/agents/omen/e.png",
+          "free": true
+        },
+        "x": {
+          "name": "From the Shadows",
+          "type": "shadowUlt",
+          "impl": "omen-x-from-the-shadows",
+          "cost": 0,
+          "max": 1,
+          "start": 0,
+          "cd": 0,
+          "intent": "ultimate",
+          "icon": "res://assets/agents/omen/x.png",
+          "free": true
+        }
+      }
+    },
+    {
+      "id": "phoenix",
+      "name": "Phoenix",
+      "role": "Duelist",
+      "color": "#ff7a30",
+      "ultCost": 6,
+      "desc": "Curve flashes, heal in fire, and return from death.",
+      "portrait": "res://assets/agents/phoenix/portrait.webp",
+      "ab": {
+        "c": {
+          "name": "Blaze",
+          "type": "firewall",
+          "impl": "phoenix-c-blaze",
+          "cost": 150,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "cover",
+          "icon": "res://assets/agents/phoenix/c.png"
+        },
+        "q": {
+          "name": "Curveball",
+          "type": "flash",
+          "impl": "phoenix-q-curveball",
+          "cost": 250,
+          "max": 2,
+          "start": 1,
+          "cd": 0,
+          "intent": "control",
+          "icon": "res://assets/agents/phoenix/q.png"
+        },
+        "e": {
+          "name": "Hot Hands",
+          "type": "hotHands",
+          "impl": "phoenix-e-hot-hands",
+          "cost": 0,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "entry",
+          "icon": "res://assets/agents/phoenix/e.png",
+          "free": true
+        },
+        "x": {
+          "name": "Run it Back",
+          "type": "phoenixRunItBack",
+          "impl": "phoenix-x-run-it-back",
+          "cost": 0,
+          "max": 1,
+          "start": 0,
+          "cd": 0,
+          "intent": "ultimate",
+          "icon": "res://assets/agents/phoenix/x.png",
+          "free": true
+        }
+      }
+    },
+    {
+      "id": "raze",
+      "name": "Raze",
+      "role": "Duelist",
+      "color": "#ff9a3d",
+      "ultCost": 8,
+      "desc": "Clear space with mobile explosives and cluster damage.",
+      "portrait": "res://assets/agents/raze/portrait.webp",
+      "ab": {
+        "c": {
+          "name": "Boom Bot",
+          "type": "boomBot",
+          "impl": "raze-c-boom-bot",
+          "cost": 300,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "entry",
+          "icon": "res://assets/agents/raze/c.png"
+        },
+        "q": {
+          "name": "Blast Pack",
+          "type": "razeBlastPack",
+          "impl": "raze-q-blast-pack",
+          "cost": 200,
+          "max": 2,
+          "start": 1,
+          "cd": 0,
+          "intent": "entry",
+          "icon": "res://assets/agents/raze/q.png"
+        },
+        "e": {
+          "name": "Paint Shells",
+          "type": "bignade",
+          "impl": "raze-e-paint-shells",
+          "cost": 0,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "damage",
+          "icon": "res://assets/agents/raze/e.png",
+          "free": true
+        },
+        "x": {
+          "name": "Showstopper",
+          "type": "rocketUlt",
+          "impl": "raze-x-showstopper",
+          "cost": 0,
+          "max": 1,
+          "start": 0,
+          "cd": 0,
+          "intent": "ultimate",
+          "icon": "res://assets/agents/raze/x.png",
+          "free": true
+        }
+      }
+    },
+    {
+      "id": "reyna",
+      "name": "Reyna",
+      "role": "Duelist",
+      "color": "#c45ad0",
+      "ultCost": 6,
+      "desc": "Consume soul orbs to heal or become intangible.",
+      "portrait": "res://assets/agents/reyna/portrait.webp",
+      "ab": {
+        "c": {
+          "name": "Leer",
+          "type": "reynaLeer",
+          "impl": "reyna-c-leer",
+          "cost": 250,
+          "max": 2,
+          "start": 1,
+          "cd": 0,
+          "intent": "control",
+          "icon": "res://assets/agents/reyna/c.png"
+        },
+        "q": {
+          "name": "Devour",
+          "type": "reynaDevour",
+          "impl": "reyna-q-devour",
+          "cost": 200,
+          "max": 2,
+          "start": 1,
+          "cd": 0,
+          "intent": "damage",
+          "icon": "res://assets/agents/reyna/q.png"
+        },
+        "e": {
+          "name": "Dismiss",
+          "type": "reynaDismiss",
+          "impl": "reyna-e-dismiss",
+          "cost": 0,
+          "max": 2,
+          "start": 1,
+          "cd": 0,
+          "intent": "entry",
+          "icon": "res://assets/agents/reyna/e.png",
+          "free": true
+        },
+        "x": {
+          "name": "Empress",
+          "type": "reynaEmpress",
+          "impl": "reyna-x-empress",
+          "cost": 0,
+          "max": 1,
+          "start": 0,
+          "cd": 0,
+          "intent": "ultimate",
+          "icon": "res://assets/agents/reyna/x.png",
+          "free": true
+        }
+      }
+    },
+    {
+      "id": "sage",
+      "name": "Sage",
+      "role": "Sentinel",
+      "color": "#e8e6da",
+      "ultCost": 8,
+      "desc": "Protect allies with healing, barriers, and resurrection.",
+      "portrait": "res://assets/agents/sage/portrait.webp",
+      "ab": {
+        "c": {
+          "name": "Barrier Orb",
+          "type": "wall",
+          "impl": "sage-c-barrier-orb",
+          "cost": 400,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "cover",
+          "icon": "res://assets/agents/sage/c.png"
+        },
+        "q": {
+          "name": "Slow Orb",
+          "type": "slowProj",
+          "impl": "sage-q-slow-orb",
+          "cost": 200,
+          "max": 2,
+          "start": 1,
+          "cd": 0,
+          "intent": "entry",
+          "icon": "res://assets/agents/sage/q.png"
+        },
+        "e": {
+          "name": "Healing Orb",
+          "type": "heal",
+          "impl": "sage-e-healing-orb",
+          "cost": 0,
+          "max": 1,
+          "start": 1,
+          "cd": 40,
+          "intent": "heal",
+          "icon": "res://assets/agents/sage/e.png",
+          "free": true
+        },
+        "x": {
+          "name": "Resurrection",
+          "type": "rez",
+          "impl": "sage-x-resurrection",
+          "cost": 0,
+          "max": 1,
+          "start": 0,
+          "cd": 0,
+          "intent": "ultimate",
+          "icon": "res://assets/agents/sage/x.png",
+          "free": true
+        }
+      }
+    },
+    {
+      "id": "skye",
+      "name": "Skye",
+      "role": "Initiator",
+      "color": "#9fe08a",
+      "ultCost": 8,
+      "desc": "Guide controllable creatures and channel team healing.",
+      "portrait": "res://assets/agents/skye/portrait.webp",
+      "ab": {
+        "c": {
+          "name": "Regrowth",
+          "type": "skyeRegrowth",
+          "impl": "skye-c-regrowth",
+          "cost": 200,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "heal",
+          "icon": "res://assets/agents/skye/c.png"
+        },
+        "q": {
+          "name": "Trailblazer",
+          "type": "skyeTrailblazer",
+          "impl": "skye-q-trailblazer",
+          "cost": 250,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "info",
+          "icon": "res://assets/agents/skye/q.png"
+        },
+        "e": {
+          "name": "Guiding Light",
+          "type": "skyeGuidingLight",
+          "impl": "skye-e-guiding-light",
+          "cost": 0,
+          "max": 2,
+          "start": 2,
+          "cd": 40,
+          "intent": "entry",
+          "icon": "res://assets/agents/skye/e.png",
+          "free": true
+        },
+        "x": {
+          "name": "Seekers",
+          "type": "skyeSeekers",
+          "impl": "skye-x-seekers",
+          "cost": 0,
+          "max": 1,
+          "start": 0,
+          "cd": 0,
+          "intent": "ultimate",
+          "icon": "res://assets/agents/skye/x.png",
+          "free": true
+        }
+      }
+    },
+    {
+      "id": "sova",
+      "name": "Sova",
+      "role": "Initiator",
+      "color": "#69c77e",
+      "ultCost": 8,
+      "desc": "Scout with a drone and expose enemies with recon arrows.",
+      "portrait": "res://assets/agents/sova/portrait.webp",
+      "ab": {
+        "c": {
+          "name": "Owl Drone",
+          "type": "sovaDrone",
+          "impl": "sova-c-owl-drone",
+          "cost": 400,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "info",
+          "icon": "res://assets/agents/sova/c.png"
+        },
+        "q": {
+          "name": "Shock Bolt",
+          "type": "shock",
+          "impl": "sova-q-shock-bolt",
+          "cost": 150,
+          "max": 2,
+          "start": 1,
+          "cd": 0,
+          "intent": "damage",
+          "icon": "res://assets/agents/sova/q.png"
+        },
+        "e": {
+          "name": "Recon Bolt",
+          "type": "recon",
+          "impl": "sova-e-recon-bolt",
+          "cost": 0,
+          "max": 1,
+          "start": 1,
+          "cd": 40,
+          "intent": "info",
+          "icon": "res://assets/agents/sova/e.png",
+          "free": true
+        },
+        "x": {
+          "name": "Hunter's Fury",
+          "type": "hunterUlt",
+          "impl": "sova-x-hunter-s-fury",
+          "cost": 0,
+          "max": 1,
+          "start": 0,
+          "cd": 0,
+          "intent": "ultimate",
+          "icon": "res://assets/agents/sova/x.png",
+          "free": true
+        }
+      }
+    },
+    {
+      "id": "tejo",
+      "name": "Tejo",
+      "role": "Initiator",
+      "color": "#e7783f",
+      "ultCost": 8,
+      "desc": "Deliver map-targeted missiles and remote reconnaissance.",
+      "portrait": "res://assets/agents/tejo/portrait.webp",
+      "ab": {
+        "c": {
+          "name": "Stealth Drone",
+          "type": "tejoDrone",
+          "impl": "tejo-c-stealth-drone",
+          "cost": 300,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "info",
+          "icon": "res://assets/agents/tejo/c.png"
+        },
+        "q": {
+          "name": "Special Delivery",
+          "type": "tejoDelivery",
+          "impl": "tejo-q-special-delivery",
+          "cost": 200,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "damage",
+          "icon": "res://assets/agents/tejo/q.png"
+        },
+        "e": {
+          "name": "Guided Salvo",
+          "type": "tejoSalvo",
+          "impl": "tejo-e-guided-salvo",
+          "cost": 0,
+          "max": 1,
+          "start": 1,
+          "cd": 40,
+          "intent": "damage",
+          "icon": "res://assets/agents/tejo/e.png",
+          "free": true
+        },
+        "x": {
+          "name": "Armageddon",
+          "type": "tejoArmageddon",
+          "impl": "tejo-x-armageddon",
+          "cost": 0,
+          "max": 1,
+          "start": 0,
+          "cd": 0,
+          "intent": "ultimate",
+          "icon": "res://assets/agents/tejo/x.png",
+          "free": true
+        }
+      }
+    },
+    {
+      "id": "veto",
+      "name": "Veto",
+      "role": "Sentinel",
+      "color": "#55b77a",
+      "ultCost": 7,
+      "desc": "Destroy hostile utility and mutate beyond debuffs.",
+      "portrait": "res://assets/agents/veto/portrait.webp",
+      "ab": {
+        "c": {
+          "name": "Crosscut",
+          "type": "vetoCrosscut",
+          "impl": "veto-c-crosscut",
+          "cost": 200,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "escape",
+          "icon": "res://assets/agents/veto/c.png"
+        },
+        "q": {
+          "name": "Chokehold",
+          "type": "vetoChokehold",
+          "impl": "veto-q-chokehold",
+          "cost": 200,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "control",
+          "icon": "res://assets/agents/veto/q.png"
+        },
+        "e": {
+          "name": "Interceptor",
+          "type": "vetoInterceptor",
+          "impl": "veto-e-interceptor",
+          "cost": 0,
+          "max": 1,
+          "start": 1,
+          "cd": 40,
+          "intent": "setup",
+          "icon": "res://assets/agents/veto/e.png",
+          "free": true
+        },
+        "x": {
+          "name": "Evolution",
+          "type": "vetoEvolution",
+          "impl": "veto-x-evolution",
+          "cost": 0,
+          "max": 1,
+          "start": 0,
+          "cd": 0,
+          "intent": "ultimate",
+          "icon": "res://assets/agents/veto/x.png",
+          "free": true
+        }
+      }
+    },
+    {
+      "id": "viper",
+      "name": "Viper",
+      "role": "Controller",
+      "color": "#59d97f",
+      "ultCost": 9,
+      "desc": "Spend fuel to maintain a toxic screen and poison cloud.",
+      "portrait": "res://assets/agents/viper/portrait.webp",
+      "ab": {
+        "c": {
+          "name": "Snake Bite",
+          "type": "acidPool",
+          "impl": "viper-c-snake-bite",
+          "cost": 200,
+          "max": 2,
+          "start": 1,
+          "cd": 0,
+          "intent": "damage",
+          "icon": "res://assets/agents/viper/c.png"
+        },
+        "q": {
+          "name": "Poison Cloud",
+          "type": "toxicSmoke",
+          "impl": "viper-q-poison-cloud",
+          "cost": 200,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "cover",
+          "icon": "res://assets/agents/viper/q.png"
+        },
+        "e": {
+          "name": "Toxic Screen",
+          "type": "toxicWall",
+          "impl": "viper-e-toxic-screen",
+          "cost": 0,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "cover",
+          "icon": "res://assets/agents/viper/e.png",
+          "free": true
+        },
+        "x": {
+          "name": "Viper's Pit",
+          "type": "toxicDome",
+          "impl": "viper-x-viper-s-pit",
+          "cost": 0,
+          "max": 1,
+          "start": 0,
+          "cd": 0,
+          "intent": "ultimate",
+          "icon": "res://assets/agents/viper/x.png",
+          "free": true
+        }
+      }
+    },
+    {
+      "id": "vyse",
+      "name": "Vyse",
+      "role": "Sentinel",
+      "color": "#b88de8",
+      "ultCost": 8,
+      "desc": "Set hidden metal traps that isolate and disarm enemies.",
+      "portrait": "res://assets/agents/vyse/portrait.webp",
+      "ab": {
+        "c": {
+          "name": "Razorvine",
+          "type": "vyseRazorvine",
+          "impl": "vyse-c-razorvine",
+          "cost": 150,
+          "max": 2,
+          "start": 1,
+          "cd": 0,
+          "intent": "setup",
+          "icon": "res://assets/agents/vyse/c.png"
+        },
+        "q": {
+          "name": "Shear",
+          "type": "vyseShear",
+          "impl": "vyse-q-shear",
+          "cost": 200,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "setup",
+          "icon": "res://assets/agents/vyse/q.png"
+        },
+        "e": {
+          "name": "Arc Rose",
+          "type": "vyseArcRose",
+          "impl": "vyse-e-arc-rose",
+          "cost": 0,
+          "max": 1,
+          "start": 1,
+          "cd": 20,
+          "intent": "setup",
+          "icon": "res://assets/agents/vyse/e.png",
+          "free": true
+        },
+        "x": {
+          "name": "Steel Garden",
+          "type": "vyseSteelGarden",
+          "impl": "vyse-x-steel-garden",
+          "cost": 0,
+          "max": 1,
+          "start": 0,
+          "cd": 0,
+          "intent": "ultimate",
+          "icon": "res://assets/agents/vyse/x.png",
+          "free": true
+        }
+      }
+    },
+    {
+      "id": "waylay",
+      "name": "Waylay",
+      "role": "Duelist",
+      "color": "#f2d25c",
+      "ultCost": 8,
+      "desc": "Burst through space and snap back to a light anchor.",
+      "portrait": "res://assets/agents/waylay/portrait.webp",
+      "ab": {
+        "c": {
+          "name": "Saturate",
+          "type": "waylaySaturate",
+          "impl": "waylay-c-saturate",
+          "cost": 200,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "damage",
+          "icon": "res://assets/agents/waylay/c.png"
+        },
+        "q": {
+          "name": "Lightspeed",
+          "type": "waylayLightspeed",
+          "impl": "waylay-q-lightspeed",
+          "cost": 200,
+          "max": 2,
+          "start": 1,
+          "cd": 0,
+          "intent": "escape",
+          "icon": "res://assets/agents/waylay/q.png"
+        },
+        "e": {
+          "name": "Refract",
+          "type": "waylayRefract",
+          "impl": "waylay-e-refract",
+          "cost": 0,
+          "max": 1,
+          "start": 1,
+          "cd": 30,
+          "intent": "escape",
+          "icon": "res://assets/agents/waylay/e.png",
+          "free": true
+        },
+        "x": {
+          "name": "Convergent Paths",
+          "type": "waylayConvergent",
+          "impl": "waylay-x-convergent-paths",
+          "cost": 0,
+          "max": 1,
+          "start": 0,
+          "cd": 0,
+          "intent": "ultimate",
+          "icon": "res://assets/agents/waylay/x.png",
+          "free": true
+        }
+      }
+    },
+    {
+      "id": "yoru",
+      "name": "Yoru",
+      "role": "Duelist",
+      "color": "#4169e1",
+      "ultCost": 7,
+      "desc": "Misdirect enemies with decoys, flashes, and dimensional travel.",
+      "portrait": "res://assets/agents/yoru/portrait.webp",
+      "ab": {
+        "c": {
+          "name": "FAKEOUT",
+          "type": "yoruFakeout",
+          "impl": "yoru-c-fakeout",
+          "cost": 100,
+          "max": 1,
+          "start": 1,
+          "cd": 0,
+          "intent": "entry",
+          "icon": "res://assets/agents/yoru/c.png"
+        },
+        "q": {
+          "name": "BLINDSIDE",
+          "type": "yoruBlindside",
+          "impl": "yoru-q-blindside",
+          "cost": 250,
+          "max": 2,
+          "start": 1,
+          "cd": 0,
+          "intent": "entry",
+          "icon": "res://assets/agents/yoru/q.png"
+        },
+        "e": {
+          "name": "GATECRASH",
+          "type": "yoruGatecrash",
+          "impl": "yoru-e-gatecrash",
+          "cost": 0,
+          "max": 1,
+          "start": 1,
+          "cd": 30,
+          "intent": "escape",
+          "icon": "res://assets/agents/yoru/e.png",
+          "free": true
+        },
+        "x": {
+          "name": "DIMENSIONAL DRIFT",
+          "type": "yoruDrift",
+          "impl": "yoru-x-dimensional-drift",
+          "cost": 0,
+          "max": 1,
+          "start": 0,
+          "cd": 0,
+          "intent": "ultimate",
+          "icon": "res://assets/agents/yoru/x.png",
+          "free": true
+        }
+      }
+    }
+  ],
+  "maps": [
+    "yiji",
+    "santa",
+    "liexia",
+    "tiangang",
+    "xuefeng",
+    "rongcheng",
+    "gumiao",
+    "huanjie",
+    "sixiang",
+    "chongqing",
+    "tianshu"
+  ],
+  "summary": {
+    "agents": 29,
+    "abilities": 116,
+    "media": 145,
+    "maps": 11
+  }
+}
