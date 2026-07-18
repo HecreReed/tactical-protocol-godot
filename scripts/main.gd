@@ -23,6 +23,7 @@ var smokes: Array = []      # {pos,r,until,mesh,body}
 var devices: Array = []     # {kind,pos,owner,team,node,until,arm_at,hp,next_fire}
 var drops: Array = []       # {body, weapon}
 var sel_map_id := ""
+var observer := false
 
 func now() -> float:
 	return _t
@@ -34,9 +35,46 @@ func _ready() -> void:
 	print("[BOOT] menu built")
 	var auto := OS.get_environment("TP_AUTOSTART")
 	if auto != "":
-		call_deferred("_start_game", auto, "fengying")
+		call_deferred("_start_game", auto, "fengying", false)
 
-# ---------------- 菜单（两步：选图 → 选特工） ----------------
+# ---------------- 菜单（复刻网页版：地图卡片+难度 → 特工卡片 / 观战模式） ----------------
+const MC_BG := Color8(0x0f, 0x19, 0x23)
+const MC_PANEL := Color8(0x13, 0x1e, 0x29)
+const MC_BORDER := Color8(0x24, 0x33, 0x3f)
+const MC_RED := Color8(0xff, 0x46, 0x55)
+const MC_TEAL := Color8(0x39, 0xd0, 0xc9)
+const MC_GOLD := Color8(0xf5, 0xc5, 0x6b)
+const MC_DIM := Color8(0x8b, 0x97, 0x8f)
+const MC_WHITE := Color8(0xec, 0xe8, 0xe1)
+
+var _menu_maps: Array = []
+var _map_cards: Array = []
+var _diff_btns: Array = []
+var _sub_label: Label
+var _step1: VBoxContainer
+var _step2: VBoxContainer
+
+static func _card_sb(bg: Color, border: Color, bw: int = 1) -> StyleBoxFlat:
+	var s := StyleBoxFlat.new()
+	s.bg_color = bg
+	s.border_color = border
+	s.set_border_width_all(bw)
+	s.content_margin_left = 12
+	s.content_margin_right = 12
+	s.content_margin_top = 10
+	s.content_margin_bottom = 10
+	return s
+
+func _mlbl(parent: Node, size: int, col: Color, text: String, center := true) -> Label:
+	var l := Label.new()
+	l.text = text
+	l.add_theme_font_size_override("font_size", size)
+	l.add_theme_color_override("font_color", col)
+	if center:
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	parent.add_child(l)
+	return l
+
 func _build_menu() -> void:
 	menu = CanvasLayer.new()
 	menu.layer = 10
@@ -45,52 +83,191 @@ func _build_menu() -> void:
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	menu.add_child(root)
 	var bg := ColorRect.new()
-	bg.color = Color(0.05, 0.09, 0.13)
+	bg.color = MC_BG
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.add_child(bg)
+	var scroll := ScrollContainer.new()
+	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.add_child(scroll)
 	var center := CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.add_child(center)
+	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.add_child(center)
 	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 6)
+	v.add_theme_constant_override("separation", 10)
 	center.add_child(v)
-	var title := Label.new()
-	title.text = "TACTICAL PROTOCOL — Godot 版\n第 1 步 · 选择地图"
-	title.add_theme_font_size_override("font_size", 26)
-	v.add_child(title)
+
+	# 标题：TACTICAL PROTOCOL（PROTOCOL 红色）
+	var th := HBoxContainer.new()
+	th.alignment = BoxContainer.ALIGNMENT_CENTER
+	th.add_theme_constant_override("separation", 14)
+	v.add_child(th)
+	_mlbl(th, 34, MC_WHITE, "TACTICAL")
+	_mlbl(th, 34, MC_RED, "PROTOCOL")
+	_sub_label = _mlbl(v, 13, MC_DIM, "第 1 步 · 选择地图与难度")
+
 	var data: Dictionary = MapBuilderScript.load_all()
 	if data.is_empty():
-		title.text = "错误：地图数据加载失败（data/maps.json 未打包）"
+		_sub_label.text = "错误：地图数据加载失败（data/maps.json 未打包）"
 		push_error("maps.json load failed")
 		return
-	print("[BOOT] maps loaded: %d" % [data["maps"].size()])
-	for m in data["maps"]:
-		var btn := Button.new()
-		btn.text = "%s — %s" % [m["name"], m["desc"]]
-		btn.pressed.connect(_pick_map.bind(m["id"], v))
-		v.add_child(btn)
+	_menu_maps = data["maps"]
+	print("[BOOT] maps loaded: %d" % [_menu_maps.size()])
 
-func _pick_map(map_id: String, v: VBoxContainer) -> void:
-	sel_map_id = map_id
-	for c in v.get_children():
-		c.queue_free()
-	var title := Label.new()
-	title.text = "第 2 步 · 选择特工（11 名 · 技能组完整复刻）"
-	title.add_theme_font_size_override("font_size", 26)
-	v.add_child(title)
+	# ---- 第 1 步：地图卡片 + 难度 ----
+	_step1 = VBoxContainer.new()
+	_step1.add_theme_constant_override("separation", 12)
+	v.add_child(_step1)
+	var cards := HFlowContainer.new()
+	cards.alignment = FlowContainer.ALIGNMENT_CENTER
+	cards.add_theme_constant_override("h_separation", 10)
+	cards.add_theme_constant_override("v_separation", 10)
+	cards.custom_minimum_size = Vector2(880, 0)
+	_step1.add_child(cards)
+	sel_map_id = _menu_maps[0]["id"]
+	for m in _menu_maps:
+		var card := PanelContainer.new()
+		card.custom_minimum_size = Vector2(150, 0)
+		card.add_theme_stylebox_override("panel", _card_sb(MC_PANEL, MC_BORDER))
+		var cv := VBoxContainer.new()
+		card.add_child(cv)
+		_mlbl(cv, 18, MC_WHITE, m["name"])
+		var dl := _mlbl(cv, 11, MC_DIM, m["desc"])
+		dl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		dl.custom_minimum_size = Vector2(126, 0)
+		card.gui_input.connect(func(ev: InputEvent):
+			if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
+				sel_map_id = m["id"]
+				_refresh_map_cards())
+		cards.add_child(card)
+		_map_cards.append({ "node": card, "id": m["id"] })
+	_refresh_map_cards()
+
+	var diffs := HBoxContainer.new()
+	diffs.alignment = BoxContainer.ALIGNMENT_CENTER
+	diffs.add_theme_constant_override("separation", 8)
+	_step1.add_child(diffs)
+	for d in [["新手", 0.55], ["常规", 0.8], ["困难", 1.0], ["天梯", 1.25]]:
+		var b := Button.new()
+		b.text = d[0]
+		b.add_theme_font_size_override("font_size", 13)
+		b.add_theme_stylebox_override("normal", _card_sb(MC_PANEL, MC_BORDER))
+		b.add_theme_stylebox_override("hover", _card_sb(MC_PANEL, MC_TEAL))
+		b.add_theme_stylebox_override("pressed", _card_sb(Color8(0x2a, 0x1a, 0x20), MC_RED))
+		b.pressed.connect(func():
+			difficulty = d[1]
+			_refresh_diff_btns())
+		diffs.add_child(b)
+		_diff_btns.append({ "node": b, "diff": d[1] })
+	_refresh_diff_btns()
+
+	var btn_row := HBoxContainer.new()
+	btn_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	btn_row.add_theme_constant_override("separation", 12)
+	_step1.add_child(btn_row)
+	var next_btn := Button.new()
+	next_btn.text = "下一步 · 选择特工 →"
+	next_btn.add_theme_font_size_override("font_size", 15)
+	next_btn.add_theme_color_override("font_color", Color.WHITE)
+	var red_sb := _card_sb(MC_RED, MC_RED)
+	red_sb.content_margin_left = 34
+	red_sb.content_margin_right = 34
+	next_btn.add_theme_stylebox_override("normal", red_sb)
+	next_btn.add_theme_stylebox_override("hover", _card_sb(Color8(0xff, 0x5c, 0x69), MC_RED))
+	next_btn.pressed.connect(func(): _to_step(2))
+	btn_row.add_child(next_btn)
+	var obs_btn := Button.new()
+	obs_btn.text = "观战模式（只看 AI 对战）"
+	obs_btn.add_theme_font_size_override("font_size", 14)
+	obs_btn.add_theme_color_override("font_color", MC_TEAL)
+	obs_btn.add_theme_stylebox_override("normal", _card_sb(Color8(0x1a, 0x2a, 0x36), MC_TEAL))
+	obs_btn.add_theme_stylebox_override("hover", _card_sb(Color8(0x22, 0x36, 0x44), MC_TEAL))
+	obs_btn.pressed.connect(func(): _start_game(sel_map_id, "", true))
+	btn_row.add_child(obs_btn)
+
+	# ---- 第 2 步：特工卡片 ----
+	_step2 = VBoxContainer.new()
+	_step2.add_theme_constant_override("separation", 12)
+	_step2.visible = false
+	v.add_child(_step2)
+	var acards := HFlowContainer.new()
+	acards.alignment = FlowContainer.ALIGNMENT_CENTER
+	acards.add_theme_constant_override("h_separation", 12)
+	acards.add_theme_constant_override("v_separation", 12)
+	acards.custom_minimum_size = Vector2(1020, 0)
+	_step2.add_child(acards)
 	for aid in Ab.AGENTS.keys():
-		var a: Dictionary = Ab.AGENTS[aid]
-		var btn := Button.new()
-		btn.text = "%s — C·%s / Q·%s / E·%s / X·%s" % [a["name"], a["c"]["name"], a["q"]["name"], a["e"]["name"], a["x"]["name"]]
-		btn.pressed.connect(_start_game.bind(sel_map_id, aid))
-		v.add_child(btn)
+		acards.add_child(_agent_card(aid))
+	var back := Button.new()
+	back.text = "← 返回选图"
+	back.add_theme_font_size_override("font_size", 14)
+	back.add_theme_color_override("font_color", MC_DIM)
+	back.add_theme_stylebox_override("normal", _card_sb(MC_PANEL, MC_BORDER))
+	back.add_theme_stylebox_override("hover", _card_sb(MC_PANEL, MC_TEAL))
+	back.pressed.connect(func(): _to_step(1))
+	var back_row := HBoxContainer.new()
+	back_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	back_row.add_child(back)
+	_step2.add_child(back_row)
 
-func _start_game(map_id: String, agent_id: String) -> void:
+	var help := _mlbl(v, 12, MC_DIM, "WASD 移动 · Shift 静步 · Ctrl 蹲 · 左键开火 · 右键瞄准 · R 换弹 · B 购买 · C/Q/E 技能 · X 大招 · F 安放/拆除/拾取 · Tab 计分板")
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+func _agent_card(aid: String) -> PanelContainer:
+	var a: Dictionary = Ab.AGENTS[aid]
+	var card := PanelContainer.new()
+	card.custom_minimum_size = Vector2(158, 0)
+	card.add_theme_stylebox_override("panel", _card_sb(MC_PANEL, MC_BORDER))
+	var cv := VBoxContainer.new()
+	cv.add_theme_constant_override("separation", 4)
+	card.add_child(cv)
+	var swatch := ColorRect.new()
+	swatch.color = a["color"]
+	swatch.custom_minimum_size = Vector2(0, 6)
+	cv.add_child(swatch)
+	_mlbl(cv, 18, MC_WHITE, a["name"])
+	var role := _mlbl(cv, 11, MC_GOLD, "%s · %s" % [a.get("role", ""), a.get("desc", "")])
+	role.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	role.custom_minimum_size = Vector2(134, 0)
+	for k in ["c", "q", "e", "x"]:
+		var ab: Dictionary = a[k]
+		var suffix := ""
+		if k == "e": suffix = "  免费"
+		elif k == "x": suffix = "  %d点" % a["ult_cost"]
+		var li := _mlbl(cv, 11, MC_DIM, "%s  %s%s" % [k.to_upper(), ab["name"], suffix], false)
+	card.gui_input.connect(func(ev: InputEvent):
+		if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
+			_start_game(sel_map_id, aid, false))
+	card.mouse_entered.connect(func(): card.add_theme_stylebox_override("panel", _card_sb(MC_PANEL, MC_RED)))
+	card.mouse_exited.connect(func(): card.add_theme_stylebox_override("panel", _card_sb(MC_PANEL, MC_BORDER)))
+	return card
+
+func _to_step(n: int) -> void:
+	_step1.visible = n == 1
+	_step2.visible = n == 2
+	_sub_label.text = "第 1 步 · 选择地图与难度" if n == 1 else "第 2 步 · 选择你的特工"
+
+func _refresh_map_cards() -> void:
+	for mc in _map_cards:
+		var selected: bool = mc["id"] == sel_map_id
+		(mc["node"] as PanelContainer).add_theme_stylebox_override("panel",
+			_card_sb(Color8(0x15, 0x30, 0x3a) if selected else MC_PANEL, MC_TEAL if selected else MC_BORDER, 2 if selected else 1))
+
+func _refresh_diff_btns() -> void:
+	for db in _diff_btns:
+		var selected: bool = absf(db["diff"] - difficulty) < 0.01
+		(db["node"] as Button).add_theme_stylebox_override("normal",
+			_card_sb(Color8(0x2a, 0x1a, 0x20) if selected else MC_PANEL, MC_RED if selected else MC_BORDER))
+		(db["node"] as Button).add_theme_color_override("font_color", MC_WHITE if selected else MC_DIM)
+
+func _start_game(map_id: String, agent_id: String, obs: bool = false) -> void:
 	if started:
 		return
 	started = true
+	observer = obs
 	if is_instance_valid(menu):
 		menu.queue_free()
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	var data: Dictionary = MapBuilderScript.load_all()
 	var md: Dictionary = {}
 	for m in data["maps"]:
@@ -125,7 +302,7 @@ func _start_game(map_id: String, agent_id: String) -> void:
 	sun.rotation_degrees = Vector3(-46, 28, 0)
 	sun.shadow_enabled = true
 	sun.light_energy = 1.25
-	sun.directional_shadow_max_distance = 160
+	sun.directional_shadow_max_distance = 110
 	add_child(sun)
 
 	map = MapBuilderScript.new()
@@ -137,7 +314,8 @@ func _start_game(map_id: String, agent_id: String) -> void:
 
 	player = PlayerScript.new()
 	player.main = self
-	player.agent_id = agent_id
+	player.agent_id = agent_id if agent_id != "" else "fengying"
+	player.observer = observer
 	add_child(player)
 	hud.setup(self)
 
@@ -147,10 +325,11 @@ func _start_game(map_id: String, agent_id: String) -> void:
 	for aid in pool:
 		if aid != agent_id:
 			ai_agents.append(aid)
-	for i in range(4):
+	var n_ally := 5 if observer else 4
+	for i in range(n_ally):
 		bots.append(_mk_bot("ally", ai_agents[i]))
 	for i in range(5):
-		bots.append(_mk_bot("enemy", ai_agents[(i + 4) % ai_agents.size()]))
+		bots.append(_mk_bot("enemy", ai_agents[(i + n_ally) % ai_agents.size()]))
 
 	match_mgr = MatchScript.new()
 	add_child(match_mgr)
@@ -164,7 +343,8 @@ func _mk_bot(t: String, aid: String) -> CharacterBody3D:
 
 func combatants() -> Array:
 	var arr := bots.duplicate()
-	arr.append(player)
+	if not observer:
+		arr.append(player)
 	return arr
 
 func can_fight() -> bool:
@@ -737,6 +917,7 @@ func spawn_particles(pos: Vector3, color: Color, amount: int, speed: float, life
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	sm.material = mat
 	p.draw_pass_1 = sm
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(p)
 	p.global_position = pos
 	p.emitting = true
@@ -775,12 +956,18 @@ func _tracer(from: Vector3, to: Vector3) -> void:
 	im.surface_add_vertex(to)
 	im.surface_end()
 	mi.mesh = im
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.albedo_color = Color(1.0, 0.91, 0.63)
-	mi.material_override = mat
+	mi.material_override = _tracer_mat()
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
 	get_tree().create_timer(0.06).timeout.connect(func(): if is_instance_valid(mi): mi.queue_free())
+
+var _trm: StandardMaterial3D = null
+func _tracer_mat() -> StandardMaterial3D:
+	if _trm == null:
+		_trm = StandardMaterial3D.new()
+		_trm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_trm.albedo_color = Color(1.0, 0.91, 0.63)
+	return _trm
 
 func map_rebuild_barriers() -> void:
 	pass

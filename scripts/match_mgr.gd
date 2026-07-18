@@ -62,7 +62,10 @@ func start_round() -> void:
 	var di := 0
 	for e in main.combatants():
 		if e.team == "ally":
-			e.revive_reset(atk_spawns[ai % atk_spawns.size()]) if e != main.player else _reset_player(atk_spawns[ai % atk_spawns.size()])
+			if e == main.player:
+				_reset_player(atk_spawns[ai % atk_spawns.size()])
+			else:
+				e.revive_reset(atk_spawns[ai % atk_spawns.size()])
 			ai += 1
 		else:
 			e.revive_reset(def_spawns[di % def_spawns.size()])
@@ -77,6 +80,8 @@ func start_round() -> void:
 
 func _reset_player(pos: Vector3) -> void:
 	var p = main.player
+	if p.observer:
+		return
 	p.alive = true
 	p.hp = 100
 	p.visible = true
@@ -146,9 +151,10 @@ func end_round(winner_side: String, reason: String) -> void:
 	var winner_team := "ally" if side_of_team("ally") == winner_side else "enemy"
 	score[winner_team] += 1
 	# 经济
-	var won_player: bool = (main.player.team == winner_team)
-	var bonus: int = 3000 if won_player else 1900 + mini(loss_streak[main.player.team], 2) * 500
-	main.player.money = mini(9000, main.player.money + bonus)
+	if not main.player.observer:
+		var won_player: bool = (main.player.team == winner_team)
+		var bonus: int = 3000 if won_player else 1900 + mini(loss_streak[main.player.team], 2) * 500
+		main.player.money = mini(9000, main.player.money + bonus)
 	loss_streak[winner_team] = 0
 	var loser := "enemy" if winner_team == "ally" else "ally"
 	loss_streak[loser] += 1

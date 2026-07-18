@@ -3,6 +3,7 @@ extends CharacterBody3D
 
 const Weapons := preload("res://scripts/weapons.gd")
 const Ab := preload("res://scripts/abilities.gd")
+const CharRig := preload("res://scripts/char_rig.gd")
 
 const SPEED := 6.0
 const GRAV := 19.0
@@ -47,6 +48,7 @@ var rocket_ult := 0
 var last_seen := Vector3.ZERO
 var hunt_until := 0.0
 var next_regroup := 0.0
+var rig: Node3D
 
 func setup(m: Node3D, t: String, aid: String) -> void:
 	main = m
@@ -63,40 +65,9 @@ func setup(m: Node3D, t: String, aid: String) -> void:
 	col.shape = cap
 	col.position = Vector3(0, 0.875, 0)
 	add_child(col)
-	var body_mesh := MeshInstance3D.new()
-	var bm := CapsuleMesh.new()
-	bm.radius = 0.32
-	bm.height = 1.7
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = color if t == "ally" else color.lerp(Color(0.9, 0.3, 0.32), 0.5)
-	mat.emission_enabled = true
-	mat.emission = mat.albedo_color * 0.3
-	bm.material = mat
-	body_mesh.mesh = bm
-	body_mesh.position = Vector3(0, 0.875, 0)
-	add_child(body_mesh)
-	var head := MeshInstance3D.new()
-	var hm := SphereMesh.new()
-	hm.radius = 0.17
-	hm.height = 0.34
-	var hmat := StandardMaterial3D.new()
-	hmat.albedo_color = Color(0.9, 0.85, 0.8)
-	hm.material = hmat
-	head.mesh = hm
-	head.position = Vector3(0, 1.66, 0)
-	add_child(head)
-	# 队伍色面甲（发光，醒目辨识）
-	var visor := MeshInstance3D.new()
-	var vb := BoxMesh.new()
-	vb.size = Vector3(0.24, 0.07, 0.05)
-	var vmat := StandardMaterial3D.new()
-	vmat.emission_enabled = true
-	vmat.emission = Color(0.25, 0.85, 0.8) if t == "ally" else Color(1.0, 0.3, 0.35)
-	vmat.emission_energy_multiplier = 2.0
-	vb.material = vmat
-	visor.mesh = vb
-	visor.position = Vector3(0, 1.67, -0.16)
-	add_child(visor)
+	rig = CharRig.new()
+	add_child(rig)
+	rig.build(t, color, agent_name, t == "ally")
 	weapon = Weapons.make(["spectre", "bulldog", "vandal", "phantom"].pick_random())
 
 func eye_pos() -> Vector3:
@@ -137,6 +108,8 @@ func _physics_process(dt: float) -> void:
 		velocity.y -= GRAV * dt
 	move_and_slide()
 	rotation.y = yaw
+	if rig != null:
+		rig.animate(Vector2(velocity.x, velocity.z).length(), false, now)
 
 func _think(now: float) -> void:
 	if now < flash_until:
@@ -317,6 +290,8 @@ func revive_at(pos: Vector3) -> void:
 	alive = true
 	hp = 100
 	visible = true
+	if rig != null:
+		rig.visible = true
 	set_physics_process(true)
 	global_position = pos
 

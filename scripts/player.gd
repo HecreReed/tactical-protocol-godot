@@ -44,12 +44,22 @@ var revealed_until := 0.0
 var knife_ult := 0
 var arrow_ult := 0
 var rocket_ult := 0
+# 视模 / 观战
+var vm_group: Node3D
+var _vm_weapon_id := ""
+var vm_kick := 0.0
+var bob_t := 0.0
+var spectate_idx := 0
+var spectating: Node = null
+var observer := false
 
 func _ready() -> void:
 	cam = Camera3D.new()
 	cam.position = Vector3(0, 1.55, 0)
 	cam.fov = 71
 	add_child(cam)
+	vm_group = Node3D.new()
+	cam.add_child(vm_group)
 	var col := CollisionShape3D.new()
 	var cap := CapsuleShape3D.new()
 	cap.radius = 0.38
@@ -61,7 +71,97 @@ func _ready() -> void:
 	secondary = Weapons.make("classic")
 	weapon = secondary
 	ability_slots = Ab.make_slots(agent_id)
+	if observer:
+		alive = false
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+# ---------------- 第一人称枪模（1:1 移植网页版 buildViewModel） ----------------
+static func _vm_mat(c: Color, rough: float, metal: float, emis: Color = Color.BLACK, ei: float = 0.0) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = c
+	m.roughness = rough
+	m.metallic = metal
+	if ei > 0.0:
+		m.emission_enabled = true
+		m.emission = emis
+		m.emission_energy_multiplier = ei
+	m.render_priority = 1
+	return m
+
+static func _vm_box(size: Vector3, mat: StandardMaterial3D, pos: Vector3, rot_x: float = 0.0) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = size
+	bm.material = mat
+	mi.mesh = bm
+	mi.position = pos
+	mi.rotation.x = rot_x
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return mi
+
+static func _vm_cyl(r: float, h: float, mat: StandardMaterial3D, pos: Vector3) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	cm.top_radius = r
+	cm.bottom_radius = r
+	cm.height = h
+	cm.material = mat
+	mi.mesh = cm
+	mi.rotation.x = PI / 2
+	mi.position = pos
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return mi
+
+func _rebuild_viewmodel() -> void:
+	for c in vm_group.get_children():
+		c.queue_free()
+	var dark := _vm_mat(Color8(0x22, 0x2a, 0x33), 0.55, 0.25)
+	var accent := _vm_mat(Color8(0x5a, 0x6a, 0x75), 0.4, 0.35)
+	var grey := _vm_mat(Color8(0x39, 0x42, 0x4c), 0.5, 0.35)
+	var g := Node3D.new()
+	var cat: String = weapon["def"]["cat"]
+	if rocket_ult > 0:
+		g.add_child(_vm_cyl(0.058, 0.62, dark, Vector3(0, 0, -0.3)))
+		g.add_child(_vm_cyl(0.073, 0.1, accent, Vector3(0, 0, -0.62)))
+		g.add_child(_vm_box(Vector3(0.035, 0.1, 0.045), dark, Vector3(0, -0.09, -0.12), 0.3))
+	elif knife_ult > 0:
+		var blade := _vm_box(Vector3(0.015, 0.05, 0.26), _vm_mat(Color8(0x7f, 0xd0, 0xd4), 0.4, 0.35, Color8(0x7f, 0xd0, 0xd4), 0.8), Vector3(0, 0, -0.16))
+		g.add_child(blade)
+		g.add_child(_vm_box(Vector3(0.03, 0.04, 0.1), dark, Vector3.ZERO))
+	else:
+		var len_map := { "pistol": 0.28, "smg": 0.42, "rifle": 0.55, "sniper": 0.68, "heavy": 0.55, "shotgun": 0.5 }
+		var L: float = len_map.get(cat, 0.4)
+		g.add_child(_vm_box(Vector3(0.045, 0.075, L * 0.55), dark, Vector3(0, 0, -L * 0.32)))
+		g.add_child(_vm_box(Vector3(0.04, 0.06, L * 0.4), grey, Vector3(0, -0.005, -L * 0.75)))
+		g.add_child(_vm_cyl(0.012, L * 0.35, dark, Vector3(0, 0.012, -L - 0.05)))
+		g.add_child(_vm_cyl(0.018, 0.06, accent, Vector3(0, 0.012, -L - 0.2)))
+		g.add_child(_vm_box(Vector3(0.006, 0.03, 0.01), dark, Vector3(0, 0.055, -L - 0.02)))
+		g.add_child(_vm_box(Vector3(0.03, 0.022, 0.012), dark, Vector3(0, 0.052, -L * 0.12)))
+		g.add_child(_vm_box(Vector3(0.034, 0.1, 0.045), dark, Vector3(0, -0.075, -0.06), 0.32))
+		g.add_child(_vm_box(Vector3(0.008, 0.012, 0.07), grey, Vector3(0, -0.045, -0.12)))
+		g.add_child(_vm_box(Vector3(0.004, 0.014, L * 0.42), accent, Vector3(0.026, 0.012, -L * 0.4)))
+		if cat != "pistol":
+			g.add_child(_vm_box(Vector3(0.032, 0.07, 0.05), grey, Vector3(0, -0.075, -L * 0.5), -0.12))
+			g.add_child(_vm_box(Vector3(0.03, 0.05, 0.046), dark, Vector3(0, -0.125, -L * 0.48), -0.3))
+			g.add_child(_vm_box(Vector3(0.036, 0.06, 0.14), grey, Vector3(0, -0.012, 0.1)))
+			g.add_child(_vm_box(Vector3(0.04, 0.08, 0.02), dark, Vector3(0, -0.015, 0.18)))
+		else:
+			g.add_child(_vm_box(Vector3(0.042, 0.03, L * 0.7), grey, Vector3(0, 0.038, -L * 0.35)))
+			g.add_child(_vm_box(Vector3(0.014, 0.02, 0.02), dark, Vector3(0, 0.04, 0.02)))
+		if cat == "smg":
+			g.add_child(_vm_box(Vector3(0.026, 0.07, 0.03), dark, Vector3(0, -0.055, -L * 0.8)))
+		if cat == "shotgun":
+			g.add_child(_vm_box(Vector3(0.05, 0.05, 0.12), accent, Vector3(0, -0.03, -L * 0.7)))
+		if cat == "heavy":
+			var drum := _vm_cyl(0.05, 0.045, grey, Vector3(0, -0.06, -L * 0.42))
+			drum.rotation = Vector3(0, 0, PI / 2)
+			g.add_child(drum)
+			g.add_child(_vm_box(Vector3(0.012, 0.03, 0.16), dark, Vector3(0, 0.075, -L * 0.3)))
+		if weapon["def"].get("scope", false):
+			g.add_child(_vm_cyl(0.022, 0.16, dark, Vector3(0, 0.078, -L * 0.42)))
+	vm_group.add_child(g)
+	vm_group.position = Vector3(0.18, -0.16, -0.35)
+	vm_group.rotation = Vector3(0, 0, 0.06)
 
 func eye_pos() -> Vector3:
 	return cam.global_position
@@ -74,6 +174,8 @@ func yaw_angle() -> float:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not alive:
+		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			spectate_idx += 1
 		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var s := SENS * (0.35 if _scoped() else 1.0)
@@ -113,8 +215,19 @@ func _scoped() -> bool:
 
 func _physics_process(dt: float) -> void:
 	if not alive:
+		_spectate(dt)
 		return
+	spectating = null
+	if cam.top_level:
+		cam.top_level = false
+		cam.position = Vector3(0, 1.55, 0)
+		cam.rotation = Vector3(pitch, 0, 0)
 	var now: float = main.now()
+	# 视模刷新（换枪/大招武器切换时）
+	var vm_id: String = weapon["def"]["name"] + ("K" if knife_ult > 0 else "") + ("R" if rocket_ult > 0 else "")
+	if vm_id != _vm_weapon_id:
+		_vm_weapon_id = vm_id
+		_rebuild_viewmodel()
 	crouching = Input.is_action_pressed("crouch")
 	var walk := Input.is_action_pressed("walk")
 	var dir := Vector3.ZERO
@@ -140,6 +253,16 @@ func _physics_process(dt: float) -> void:
 
 	cam.position.y = 1.15 if crouching else 1.55
 	cam.fov = lerpf(cam.fov, 30.0 if _scoped() else 71.0, dt * 14.0)
+	# 视模摆动/后座/换弹动画
+	bob_t += Vector2(velocity.x, velocity.z).length() * dt * 1.8
+	vm_kick = move_toward(vm_kick, 0.0, dt * 0.6)
+	var ads := _scoped()
+	var tx := 0.0 if ads else 0.18
+	var ty := (-0.12 if ads else -0.16) + sin(bob_t) * 0.004
+	vm_group.position = vm_group.position.lerp(Vector3(tx, ty, -0.35 + vm_kick), minf(1.0, dt * 18.0))
+	vm_group.visible = not (ads and weapon["def"].get("scope", false))
+	var rl: bool = weapon["reload_end"] > 0
+	vm_group.rotation.x = lerpf(vm_group.rotation.x, (0.5 if rl else 0.0) + vm_kick * 1.4, dt * 10.0)
 
 	# 换弹结算
 	if weapon["reload_end"] > 0 and now >= weapon["reload_end"]:
@@ -169,6 +292,35 @@ func _physics_process(dt: float) -> void:
 	if Input.is_action_pressed("interact"):
 		main.match_mgr.player_interact(self, dt)
 		_try_pickup()
+
+# ---------------- 观战（阵亡后跟随存活队友，左键切换） ----------------
+func _spectate(dt: float) -> void:
+	vm_group.visible = false
+	if not cam.top_level:
+		cam.top_level = true
+	var allies: Array = []
+	for e in main.bots:
+		if e.alive and (observer or e.team == "ally"):
+			allies.append(e)
+	if allies.size() > 0:
+		var t: Node = allies[spectate_idx % allies.size()]
+		spectating = t
+		if t.rig != null:
+			t.rig.visible = false
+		for e in allies:
+			if e != t and e.rig != null:
+				e.rig.visible = true
+		var eye: Vector3 = t.global_position + Vector3(0, 1.55, 0)
+		cam.global_position = cam.global_position.lerp(eye, minf(1.0, dt * 20.0))
+		var want := Basis.from_euler(Vector3(0, t.yaw, 0))
+		if t.target != null and is_instance_valid(t.target):
+			var d: Vector3 = t.aim_dir()
+			want = Basis.looking_at(d, Vector3.UP)
+		cam.global_transform.basis = cam.global_transform.basis.slerp(want, minf(1.0, dt * 12.0))
+	else:
+		spectating = null
+		cam.global_position = cam.global_position.lerp(Vector3(0, 42, 12), minf(1.0, dt * 3.0))
+		cam.global_transform.basis = cam.global_transform.basis.slerp(Basis.from_euler(Vector3(-1.25, 0, 0)), minf(1.0, dt * 3.0))
 
 func _try_pickup() -> void:
 	var d: Dictionary = main.nearest_drop(global_position, 1.8)
@@ -201,6 +353,7 @@ func _shoot(now: float) -> void:
 		main.hitscan(self, eye_pos(), d.normalized(), weapon["def"])
 	bloom += 0.5
 	recoil += 1.4
+	vm_kick += 0.02
 	cam.rotation.x = clampf(cam.rotation.x + 0.006, -1.55, 1.55)
 	main.spawn_particles(eye_pos() + aim_dir() * 0.9, Color(1.0, 0.85, 0.5), 3, 1.5, 0.1)
 
