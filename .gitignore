@@ -1,2 +1,4 @@
 .godot/
 *.tmp
+*.uid
+assets/agents/**/*.import
