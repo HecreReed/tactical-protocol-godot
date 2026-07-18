@@ -18,7 +18,14 @@ var _boxes: Array = []            # 碰撞盒 [{min:Vector3,max:Vector3}] 用于
 
 static func load_all() -> Dictionary:
 	var f := FileAccess.open("res://data/maps.json", FileAccess.READ)
-	return JSON.parse_string(f.get_as_text())
+	if f == null:
+		push_error("cannot open res://data/maps.json")
+		return {}
+	var parsed = JSON.parse_string(f.get_as_text())
+	if typeof(parsed) != TYPE_DICTIONARY:
+		push_error("maps.json parse failed")
+		return {}
+	return parsed
 
 func build(map_dict: Dictionary, world: float) -> void:
 	md = map_dict

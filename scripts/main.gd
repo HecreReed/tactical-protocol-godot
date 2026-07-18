@@ -28,8 +28,10 @@ func now() -> float:
 	return _t
 
 func _ready() -> void:
+	print("[BOOT] main._ready")
 	_t = 0.0
 	_build_menu()
+	print("[BOOT] menu built")
 	var auto := OS.get_environment("TP_AUTOSTART")
 	if auto != "":
 		call_deferred("_start_game", auto, "fengying")
@@ -38,22 +40,30 @@ func _ready() -> void:
 func _build_menu() -> void:
 	menu = CanvasLayer.new()
 	menu.layer = 10
+	add_child(menu)
+	var root := Control.new()
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	menu.add_child(root)
 	var bg := ColorRect.new()
 	bg.color = Color(0.05, 0.09, 0.13)
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	menu.add_child(bg)
-	var sc := ScrollContainer.new()
-	sc.set_anchors_preset(Control.PRESET_FULL_RECT)
-	menu.add_child(sc)
+	root.add_child(bg)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.add_child(center)
 	var v := VBoxContainer.new()
-	v.custom_minimum_size = Vector2(640, 0)
-	v.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	sc.add_child(v)
+	v.add_theme_constant_override("separation", 6)
+	center.add_child(v)
 	var title := Label.new()
 	title.text = "TACTICAL PROTOCOL — Godot 版\n第 1 步 · 选择地图"
 	title.add_theme_font_size_override("font_size", 26)
 	v.add_child(title)
 	var data: Dictionary = MapBuilderScript.load_all()
+	if data.is_empty():
+		title.text = "错误：地图数据加载失败（data/maps.json 未打包）"
+		push_error("maps.json load failed")
+		return
+	print("[BOOT] maps loaded: %d" % [data["maps"].size()])
 	for m in data["maps"]:
 		var btn := Button.new()
 		btn.text = "%s — %s" % [m["name"], m["desc"]]
