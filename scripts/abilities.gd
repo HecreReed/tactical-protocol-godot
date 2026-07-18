@@ -110,7 +110,14 @@ static func cast(main: Node3D, ent: Node, key: String) -> bool:
 				ent.velocity = d2 * 8.0 + Vector3.UP * 7.2
 				main.explosion_fx(ent.global_position, 1.5, Color(1.0,0.7,0.3))
 			"heal":
-				ent.hp = minf(100.0, ent.hp + 60.0)
+				var heal_t: Node = ent
+				for e in main.combatants():
+					if e != ent and e.alive and e.team == ent.team and e.hp < 60.0 \
+							and e.global_position.distance_to(ent.global_position) < 12.0:
+						if heal_t == ent or e.hp < heal_t.hp:
+							heal_t = e
+				heal_t.hp = minf(100.0, heal_t.hp + 60.0)
+				main.spawn_particles(heal_t.global_position + Vector3(0, 1.2, 0), Color(0.6, 1.0, 0.7), 14, 2.0, 0.6)
 				slot["cd_until"] = now + def.get("cd", 45.0)
 			"phoenix_ult":
 				ent.hp = 100.0

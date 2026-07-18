@@ -26,6 +26,16 @@ jobs:
       - name: Import project
         run: ./Godot_v4.6-stable_linux.x86_64 --headless --path . --import || true
 
+      - name: Smoke test (headless autostart, fail on script errors)
+        run: |
+          TP_AUTOSTART=yiji timeout 300 ./Godot_v4.6-stable_linux.x86_64 --headless --path . --quit-after 3000 2>&1 | tee /tmp/smoke.log || true
+          if grep -q "SCRIPT ERROR" /tmp/smoke.log; then
+            echo "::error::Script errors detected in smoke test"
+            grep -A2 "SCRIPT ERROR" /tmp/smoke.log | head -40
+            exit 1
+          fi
+          grep -q "\[BOOT\] menu built" /tmp/smoke.log || (echo "::error::Game did not boot" && exit 1)
+
       - name: Export Web
         run: |
           mkdir -p build/web

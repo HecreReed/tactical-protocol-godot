@@ -368,6 +368,30 @@ func has_los(from: Vector3, to: Vector3, exclude: Array) -> bool:
 	q.exclude = rids
 	return space.intersect_ray(q).is_empty()
 
+func pierce_shot(shooter: Node, origin: Vector3, dir: Vector3) -> void:
+	# 猎杀之矢：无视墙体，命中射线附近最近的敌人
+	var best: Node = null
+	var bd := 1e9
+	for e in combatants():
+		if not e.alive or e.team == shooter.team:
+			continue
+		var to: Vector3 = e.global_position + Vector3(0, 1.2, 0) - origin
+		var t := to.dot(dir)
+		if t < 1.0 or t > 70.0:
+			continue
+		var off: float = (to - dir * t).length()
+		if off < 1.1 and t < bd:
+			bd = t
+			best = e
+	_tracer(origin + dir * 0.6, origin + dir * (bd if best != null else 60.0))
+	sfx.shot("sniper", 0.0)
+	if best != null:
+		spawn_particles(best.global_position + Vector3(0, 1.2, 0), Color(0.4, 1.0, 0.6), 12, 3.0, 0.4)
+		if shooter == player:
+			sfx.play("hit")
+		best.take_damage(90.0, shooter, false)
+		best.revealed_until = now() + 2.0
+
 func hitscan(shooter: Node, origin: Vector3, dir: Vector3, def: Dictionary) -> void:
 	var space := get_world_3d().direct_space_state
 	var to: Vector3 = origin + dir * float(def["range"]) * 2.0
@@ -385,8 +409,12 @@ func hitscan(shooter: Node, origin: Vector3, dir: Vector3, def: Dictionary) -> v
 		if rel_y > 1.45: part = "h"
 		elif rel_y > 0.85: part = "b"
 		var dmg: float = def["dmg"][part]
-		if origin.distance_to(hit["position"]) > float(def["range"]):
-			dmg *= 0.75
+		var dist := origin.distance_to(hit["position"])
+		for tier in def.get("fall", []):
+			if dist > float(tier[0]):
+				dmg = def["dmg"][part] * float(tier[1])
+		if dist > float(def["range"]):
+			dmg = minf(dmg, def["dmg"][part] * 0.6)
 		spawn_particles(hit["position"], Color(0.8, 0.15, 0.15), 10, 3.0, 0.35)
 		if shooter == player:
 			sfx.play("headshot" if part == "h" else "hit")
@@ -427,7 +455,11 @@ func throw_grenade(shooter: Node, kind: String, origin: Vector3, dir: Vector3) -
 	body.linear_velocity = dir * 21.0 + Vector3.UP * 3.0
 	body.angular_velocity = Vector3(randf_range(-8, 8), randf_range(-8, 8), 0)
 	var fuse := 1.15 if kind != "flash_throw" else 0.55
-	get_tree().create_timer(fuse).timeout.connect(_grenade_pop.bind(body, kind, shooter))
+	var wr: WeakRef = weakref(body)
+	get_tree().create_timer(fuse).timeout.connect(func():
+		var b: Node = wr.get_ref()
+		if b != null:
+			_grenade_pop(b, kind, shooter))
 
 func _kind_color(kind: String) -> Color:
 	match kind:
@@ -561,7 +593,7 @@ func flash_burst(pos: Vector3, shooter: Node) -> void:
 		var d: float = ent.eye_pos().distance_to(pos)
 		if d > 22.0:
 			continue
-		if not has_los(pos, ent.eye_pos(), [shooter]):
+		if not has_los(pos, ent.eye_pos(), [shooter, ent]):
 			continue
 		var dur := clampf(1.9 - d * 0.05, 0.4, 1.9)
 		ent.flash_until = maxf(ent.flash_until, now() + dur)
@@ -636,10 +668,27 @@ func teleport_site(ent: Node) -> void:
 	spawn_particles(ent.global_position, Color(0.54, 0.44, 0.85), 26, 5.0, 0.6)
 
 func smoke_site_chokes(ent: Node) -> void:
+	# 玩家：烟落在准星指向的落点（单发单点，对齐无畏契约天穹）；AI：轮流封锁计划点烟位
+	if ent == player:
+		var space := get_world_3d().direct_space_state
+		var q := PhysicsRayQueryParameters3D.create(ent.eye_pos(), ent.eye_pos() + ent.aim_dir() * 60.0)
+		q.collision_mask = 1
+		q.exclude = [ent.get_rid()]
+		var hit := space.intersect_ray(q)
+		var p: Vector3 = hit["position"] if not hit.is_empty() else ent.eye_pos() + ent.aim_dir() * 40.0
+		spawn_smoke(Vector3(p.x, 0, p.z), 4.2, 18.0)
+		return
 	var site: String = match_mgr.plan_site
 	var pts: Array = map.md["smokePoints"].get(site, [])
-	for pt in pts:
-		spawn_smoke(Vector3(pt[0], 0, pt[1]), 4.2, 18.0)
+	if pts.is_empty():
+		spawn_smoke(ent.global_position + ent.aim_dir() * 12.0, 4.2, 18.0)
+		return
+	var idx: int = ent.get_instance_id() % pts.size()
+	if "smoke_idx" in ent:
+		idx = ent.smoke_idx % pts.size()
+		ent.smoke_idx += 1
+	var pt: Array = pts[idx]
+	spawn_smoke(Vector3(pt[0], 0, pt[1]), 4.2, 18.0)
 
 func orbital_strike(ent: Node, origin: Vector3, dir: Vector3) -> void:
 	var space := get_world_3d().direct_space_state
@@ -709,7 +758,10 @@ func spawn_wall(pos: Vector3, yaw: float, dur: float) -> void:
 	add_child(body)
 	body.global_position = Vector3(center.x, 1.1, center.z)
 	body.rotation.y = yaw
-	get_tree().create_timer(dur).timeout.connect(func(): if is_instance_valid(body): body.queue_free())
+	var wrw: WeakRef = weakref(body)
+	get_tree().create_timer(dur).timeout.connect(func():
+		var b: Node = wrw.get_ref()
+		if b != null: b.queue_free())
 
 func spawn_firewall(ent: Node, pos: Vector3, dir: Vector3) -> void:
 	var d2 := Vector3(dir.x, 0, dir.z).normalized()
@@ -798,7 +850,7 @@ func _tick_devices(dt: float) -> void:
 					if not e.alive or e.team == d["team"]:
 						continue
 					var dist: float = e.global_position.distance_to(d["pos"])
-					if dist < 26.0 and has_los(d["pos"] + Vector3(0, 0.8, 0), e.eye_pos(), []):
+					if dist < 26.0 and has_los(d["pos"] + Vector3(0, 0.8, 0), e.eye_pos(), [e, d.get("owner")]):
 						d["next_fire"] = now() + 0.55
 						_tracer(d["pos"] + Vector3(0, 0.8, 0), e.eye_pos())
 						if randf() < 0.78:
@@ -852,6 +904,14 @@ func drop_weapon(ent: Node, weapon: Dictionary) -> void:
 	body.global_position = ent.global_position + Vector3(0, 1.0, 0)
 	body.linear_velocity = Vector3(randf_range(-2, 2), 3.0, randf_range(-2, 2))
 	body.angular_velocity = Vector3(randf_range(-6, 6), randf_range(-6, 6), randf_range(-6, 6))
+	var wrd: WeakRef = weakref(body)
+	get_tree().create_timer(20.0).timeout.connect(func():
+		var b: Node = wrd.get_ref()
+		if b != null:
+			for i in range(drops.size() - 1, -1, -1):
+				if drops[i]["body"] == b:
+					drops.remove_at(i)
+			b.queue_free())
 	drops.append({ "body": body, "weapon": weapon })
 
 func nearest_drop(pos: Vector3, max_d: float) -> Dictionary:
@@ -897,7 +957,10 @@ func spawn_ragdoll(ent: Node, from_dir: Vector3) -> void:
 	body.global_position = ent.global_position + Vector3(0, 0.9, 0)
 	body.apply_impulse(from_dir * 180.0 + Vector3.UP * 100.0)
 	body.apply_torque_impulse(Vector3(randf_range(-40, 40), 0, randf_range(-40, 40)))
-	get_tree().create_timer(8.0).timeout.connect(func(): if is_instance_valid(body): body.queue_free())
+	var wr8: WeakRef = weakref(body)
+	get_tree().create_timer(8.0).timeout.connect(func():
+		var b: Node = wr8.get_ref()
+		if b != null: b.queue_free())
 
 # ---------------- 粒子 / 特效 ----------------
 func spawn_particles(pos: Vector3, color: Color, amount: int, speed: float, life: float) -> void:
@@ -976,6 +1039,25 @@ func _tracer(from: Vector3, to: Vector3) -> void:
 	add_child(mi)
 	get_tree().create_timer(0.06).timeout.connect(func(): if is_instance_valid(mi): mi.queue_free())
 
+func clear_round_fx() -> void:
+	# 烟雾/伤害区/部署物/掉落武器/投掷物全部清理（对齐网页版 clearRoundFX）
+	for sm in smokes:
+		if is_instance_valid(sm.get("mesh")): sm["mesh"].queue_free()
+		if sm.has("body") and is_instance_valid(sm.get("body")): sm["body"].queue_free()
+	smokes.clear()
+	for z in zones:
+		if is_instance_valid(z.get("mesh")): z["mesh"].queue_free()
+	zones.clear()
+	for d in devices:
+		if is_instance_valid(d.get("node")): d["node"].queue_free()
+	devices.clear()
+	for d in drops:
+		if is_instance_valid(d.get("body")): d["body"].queue_free()
+	drops.clear()
+	for c in get_children():
+		if c is RigidBody3D:
+			c.queue_free()
+
 var _trm: StandardMaterial3D = null
 func _tracer_mat() -> StandardMaterial3D:
 	if _trm == null:
@@ -985,7 +1067,7 @@ func _tracer_mat() -> StandardMaterial3D:
 	return _trm
 
 func map_rebuild_barriers() -> void:
-	pass
+	map.build_barriers()
 
 # ---------------- 主循环 ----------------
 var _dbg_next := 0.0

@@ -68,6 +68,10 @@ var has_wander := false
 var spawn_anchor := Vector3.ZERO
 var assault_role := "entry"
 var loot_until := 0.0
+var money := 800
+var armor := 0
+var bought_round := -1
+var smoke_idx := 0
 
 func setup(m: Node3D, t: String, aid: String) -> void:
 	main = m
@@ -87,7 +91,7 @@ func setup(m: Node3D, t: String, aid: String) -> void:
 	rig = CharRig.new()
 	add_child(rig)
 	rig.build(t, color, agent_name, t == "ally")
-	weapon = Weapons.make(["spectre", "bulldog", "vandal", "phantom"].pick_random())
+	weapon = Weapons.make("classic")
 
 func _step_assist() -> void:
 	# 楼梯/矮台阶直接走上去（≤0.55m），不需要跳
@@ -211,9 +215,13 @@ func _think(now: float) -> void:
 				return
 		elif state == "loot":
 			state = "wait"
-	if main.match_mgr.phase == "buy" and main.match_mgr.side_of(self) == "atk":
-		_buy_wander(now)
-		return
+	if main.match_mgr.phase == "buy":
+		if bought_round != main.match_mgr.round_no:
+			bought_round = main.match_mgr.round_no
+			_bot_buy()
+		if main.match_mgr.side_of(self) == "atk":
+			_buy_wander(now)
+			return
 	main.match_mgr.bot_think(self, now)
 	_util_abilities(now)
 
@@ -245,7 +253,7 @@ func _navigate(dt: float, now: float) -> void:
 		return
 	# 路点推进
 	while path_i < path.size():
-		var wp := Vector3(path[path_i].x + 0.5, 0, path[path_i].y + 0.5)
+		var wp := Vector3(path[path_i].x, 0, path[path_i].y)
 		if Vector2(global_position.x - wp.x, global_position.z - wp.z).length() < 0.9:
 			path_i += 1
 		else:
@@ -271,13 +279,15 @@ func _navigate(dt: float, now: float) -> void:
 			wd_kick += 1
 			if wd_kick >= 2:
 				wd_kick = 0
-				var c: Vector2i = main.map._nearest_cell(global_position)
-				global_position = Vector3(c.x + 0.5, global_position.y, c.y + 0.5)
+				var nid: int = main.map._nearest_nav_id(global_position)
+				if nid >= 0:
+					var np: Vector3 = main.map.astar.get_point_position(nid)
+					global_position = Vector3(np.x, np.y + 0.1, np.z)
 				velocity = Vector3.ZERO
 			set_goal(goal + Vector3(randf_range(-2.5, 2.5), 0, randf_range(-2.5, 2.5)))
 	var next: Vector3 = Vector3(goal.x, 0, goal.z)
 	if path_i < path.size():
-		next = Vector3(path[path_i].x + 0.5, 0, path[path_i].y + 0.5)
+		next = Vector3(path[path_i].x, 0, path[path_i].y)
 	var dir := next - global_position
 	dir.y = 0
 	if dir.length() > 0.05:
@@ -371,6 +381,9 @@ func take_damage(dmg: float, killer: Node = null, _hs: bool = false) -> void:
 		return
 	if main.now() < resist_until:
 		dmg *= 0.55
+	var absorb: float = minf(armor, dmg * 0.66)
+	armor -= int(absorb)
+	dmg -= absorb
 	hp -= dmg
 	last_hurt_at = main.now()
 	# 受击反应：没有目标时转向攻击者并短暂追击
@@ -399,6 +412,27 @@ func revive_at(pos: Vector3) -> void:
 		rig.visible = true
 	set_physics_process(true)
 	global_position = pos
+
+func _bot_buy() -> void:
+	var cur_cost: int = weapon["def"].get("cost", 0)
+	var pick := ""
+	if money >= 2900 and cur_cost < 2900:
+		pick = ["vandal", "phantom"].pick_random()
+	elif money >= 2050 and cur_cost < 2050:
+		pick = ["bulldog", "guardian"].pick_random()
+	elif money >= 1600 and cur_cost < 1600:
+		pick = ["spectre", "ares"].pick_random()
+	elif money >= 950 and cur_cost < 950:
+		pick = ["stinger", "bucky"].pick_random()
+	if pick != "":
+		money -= Weapons.LIST[pick]["cost"]
+		weapon = Weapons.make(pick)
+	if money >= 1000 and armor < 50:
+		money -= 1000
+		armor = 50
+	elif money >= 400 and armor < 25:
+		money -= 400
+		armor = 25
 
 func _buy_wander(now: float) -> void:
 	# 购买阶段在出生区自由走动张望（web buyWander）

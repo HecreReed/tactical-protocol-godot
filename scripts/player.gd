@@ -58,6 +58,7 @@ var sens_mult := 1.0
 var fov_base := 71.0
 var step_acc := 0.0
 var cast_mode := ""
+var next_pickup_t := 0.0
 var mouse_ignore_until := 0.0
 var _was_captured := true
 
@@ -143,6 +144,13 @@ func _rebuild_viewmodel() -> void:
 		g.add_child(orb)
 		var hand := _vm_box(Vector3(0.055, 0.05, 0.11), _vm_mat(Color8(0x22, 0x2a, 0x33), 0.55, 0.25), Vector3(0, -0.075, -0.1), 0.35)
 		g.add_child(hand)
+	elif arrow_ult > 0:
+		var acol := Color(0.4, 1.0, 0.6)
+		var shaft := _vm_box(Vector3(0.012, 0.012, 0.5), _vm_mat(acol, 0.4, 0.3, acol, 1.2), Vector3(0, 0, -0.3))
+		g.add_child(shaft)
+		var tip := _vm_box(Vector3(0.025, 0.025, 0.06), _vm_mat(acol, 0.3, 0.5, acol, 2.0), Vector3(0, 0, -0.56))
+		g.add_child(tip)
+		g.add_child(_vm_box(Vector3(0.03, 0.05, 0.1), dark, Vector3(0, -0.05, -0.08), 0.3))
 	elif rocket_ult > 0:
 		g.add_child(_vm_cyl(0.058, 0.62, dark, Vector3(0, 0, -0.3)))
 		g.add_child(_vm_cyl(0.073, 0.1, accent, Vector3(0, 0, -0.62)))
@@ -288,7 +296,7 @@ func _physics_process(dt: float) -> void:
 		mouse_ignore_until = now + 0.15
 	_was_captured = cap
 	# 视模刷新（换枪/大招武器切换时）
-	var vm_id: String = weapon["def"]["name"] + ("K" if knife_ult > 0 else "") + ("R" if rocket_ult > 0 else "") + cast_mode
+	var vm_id: String = weapon["def"]["name"] + ("K" if knife_ult > 0 else "") + ("R" if rocket_ult > 0 else "") + ("A" if arrow_ult > 0 else "") + cast_mode
 	if vm_id != _vm_weapon_id:
 		_vm_weapon_id = vm_id
 		_rebuild_viewmodel()
@@ -352,12 +360,17 @@ func _physics_process(dt: float) -> void:
 	var fire_tap := Input.is_action_just_pressed("fire")
 	var wants_fire: bool = fire_held if weapon["def"].get("auto", true) else fire_tap
 	if rocket_ult > 0 or knife_ult > 0: wants_fire = fire_held
+	if arrow_ult > 0: wants_fire = fire_tap
 	if wants_fire and main.can_fight() and now >= weapon["next_fire"] and weapon["reload_end"] == 0.0:
 		if rocket_ult > 0:
 			rocket_ult -= 1
 			weapon["next_fire"] = now + 0.9
 			main.sfx.shot("rifle")
 			main.throw_grenade(self, "nade_throw", eye_pos(), aim_dir())
+		elif arrow_ult > 0:
+			arrow_ult -= 1
+			weapon["next_fire"] = now + 0.9
+			main.pierce_shot(self, eye_pos(), aim_dir())
 		elif knife_ult > 0:
 			knife_ult -= 1
 			weapon["next_fire"] = now + 0.33
@@ -431,9 +444,12 @@ func _step_assist() -> void:
 		global_position.y = hit["position"].y + 0.02
 
 func _try_pickup() -> void:
+	if main.now() < next_pickup_t:
+		return
 	var d: Dictionary = main.nearest_drop(global_position, 1.8)
 	if d.is_empty():
 		return
+	next_pickup_t = main.now() + 0.6
 	var w: Dictionary = main.take_drop(d)
 	if w["def"]["cat"] == "pistol":
 		secondary = w

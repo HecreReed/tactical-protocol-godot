@@ -1,6 +1,8 @@
 # match_mgr.gd — 回合循环：购买/交战/下包/拆包/结算/换边/经济
 extends Node
 
+const Weapons := preload("res://scripts/weapons.gd")
+
 const ROUND_TIME := 100.0
 const BUY_TIME := 20.0
 const PLANT_TIME := 4.0
@@ -86,6 +88,7 @@ func start_round() -> void:
 	defuse_prog = 0.0
 	execute_called = false
 	spike_claimer = null
+	main.clear_round_fx()
 	var site_keys: Array = main.map.sites.keys()
 	plan_site = site_keys.pick_random()
 	main.map_rebuild_barriers()
@@ -131,6 +134,7 @@ func _reset_player(pos: Vector3) -> void:
 func _process(_dt: float) -> void:
 	var n := now()
 	_update_spike_vis()
+	_channel_watch()
 	# 玩家走近掉落的 SPIKE 自动拾取
 	if spike_state == "dropped" and not main.player.observer and main.player.alive and side_of(main.player) == "atk" \
 			and main.player.global_position.distance_to(spike_pos) < 1.6:
@@ -173,6 +177,7 @@ func _process(_dt: float) -> void:
 					round_no += 1
 					if round_no == 13:
 						ally_side = "def" if ally_side == "atk" else "atk"
+						_halftime_reset()
 						main.hud.banner("攻防互换")
 					start_round()
 
@@ -204,16 +209,52 @@ func end_round(winner_side: String, reason: String) -> void:
 	t_phase = now() + 5.0
 	var winner_team := "ally" if side_of_team("ally") == winner_side else "enemy"
 	score[winner_team] += 1
-	# 经济
-	if not main.player.observer:
-		var won_player: bool = (main.player.team == winner_team)
-		var bonus: int = 3000 if won_player else 1900 + mini(loss_streak[main.player.team], 2) * 500
-		main.player.money = mini(9000, main.player.money + bonus)
+	# 经济：全队发放（含 bot）
+	for e in main.combatants():
+		if e == main.player and main.player.observer:
+			continue
+		var won: bool = (e.team == winner_team)
+		var bonus: int = 3000 if won else 1900 + mini(loss_streak[e.team], 2) * 500
+		e.money = mini(9000, e.money + bonus)
 	loss_streak[winner_team] = 0
 	var loser := "enemy" if winner_team == "ally" else "ally"
 	loss_streak[loser] += 1
 	main.hud.banner("%s 获胜 — %s" % ["我方" if winner_team == "ally" else "敌方", reason])
 	main.sfx.play("round_win" if winner_team == "ally" else "round_lose")
+
+func _halftime_reset() -> void:
+	for e in main.combatants():
+		e.money = 800
+		e.ult_points = 0
+		if e == main.player:
+			e.primary = {}
+			e.secondary = Weapons.make("classic")
+			e.weapon = e.secondary
+			e.slot = "secondary"
+			e.armor = 0
+		else:
+			e.weapon = Weapons.make("classic")
+	main.hud.banner("换边 — 经济重置")
+
+var _plant_ent: Node = null
+var _last_plant_t := -9.0
+var _defuse_ent: Node = null
+var _last_defuse_t := -9.0
+
+func _channel_watch() -> void:
+	var n := now()
+	# 下包松手：进度清零（对齐无畏契约）
+	if _plant_ent != null and n - _last_plant_t > 0.3:
+		if is_instance_valid(_plant_ent):
+			_plant_ent.channel = ""
+		_plant_ent = null
+		spike_prog = 0.0
+	# 拆包松手：保留半拆检查点（3.5s）
+	if _defuse_ent != null and n - _last_defuse_t > 0.3:
+		if is_instance_valid(_defuse_ent):
+			_defuse_ent.channel = ""
+		_defuse_ent = null
+		defuse_prog = 3.5 if defuse_prog >= 3.5 else 0.0
 
 func side_of_team(t: String) -> String:
 	return ally_side if t == "ally" else ("def" if ally_side == "atk" else "atk")
@@ -253,6 +294,8 @@ func plant_tick(ent: Node, dt: float) -> void:
 		ent.channel = ""
 		return
 	ent.channel = "plant"
+	_plant_ent = ent
+	_last_plant_t = now()
 	spike_prog += dt
 	if spike_prog >= PLANT_TIME:
 		ent.channel = ""
@@ -265,6 +308,11 @@ func plant_tick(ent: Node, dt: float) -> void:
 		main.spawn_spike_mesh(spike_pos)
 		main.hud.banner("SPIKE 已安放 — 45 秒")
 		main.sfx.play("planted")
+		# 下包全队奖励：+300 金钱 +1 大招点
+		for e in main.combatants():
+			if side_of(e) == "atk":
+				e.money = mini(9000, e.money + 300)
+				e.ult_points = mini(9, e.ult_points + 1)
 
 func defuse_tick(ent: Node, dt: float) -> void:
 	if phase != "planted":
@@ -273,6 +321,8 @@ func defuse_tick(ent: Node, dt: float) -> void:
 		ent.channel = ""
 		return
 	ent.channel = "defuse"
+	_defuse_ent = ent
+	_last_defuse_t = now()
 	defuse_prog += dt
 	if defuse_prog >= DEFUSE_TIME:
 		ent.channel = ""

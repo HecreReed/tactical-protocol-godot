@@ -20,6 +20,7 @@ var main: Node3D
 var buy_open := false
 var banner_until := 0.0
 var bought_this_round: Array = []
+var ab_bought := { "c": 0, "q": 0 }
 
 var score_ally_l: Label
 var score_enemy_l: Label
@@ -492,11 +493,15 @@ func _ability_input(ev: InputEvent, k: String) -> void:
 	var def: Dictionary = sl["def"]
 	if ev.button_index == MOUSE_BUTTON_LEFT:
 		if sl["n"] >= def.get("max", 1) or p.money < def["cost"]:
+			main.sfx.play("deny")
 			return
 		p.money -= def["cost"]
 		sl["n"] += 1
-	elif ev.button_index == MOUSE_BUTTON_RIGHT and sl["n"] > 0 and def["cost"] > 0:
+		ab_bought[k] += 1
+		main.sfx.play("buy")
+	elif ev.button_index == MOUSE_BUTTON_RIGHT and sl["n"] > 0 and def["cost"] > 0 and ab_bought.get(k, 0) > 0:
 		sl["n"] -= 1
+		ab_bought[k] -= 1
 		p.money = mini(9000, p.money + def["cost"])
 	_refresh_buy()
 
@@ -520,6 +525,7 @@ func toggle_buy() -> void:
 
 func on_round_start() -> void:
 	bought_this_round.clear()
+	ab_bought = { "c": 0, "q": 0 }
 	if buy_open:
 		_refresh_buy()
 
@@ -613,9 +619,30 @@ func _build_lock_hint() -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED)
 	lock_hint.add_child(btn)
 func _draw_crosshair(c: Control) -> void:
-	if main != null and main.player != null and not main.player.alive:
+	if main == null or main.player == null or not main.player.alive:
 		return
 	var ctr := c.size / 2.0
+	if main.player._scoped():
+		# 开镜遮罩：外围全黑 + 圆形视野 + 瞄准线（复刻网页版 #scope）
+		var r: float = minf(c.size.x, c.size.y) * 0.30
+		var dark := Color(0.008, 0.02, 0.04, 0.985)
+		c.draw_rect(Rect2(0, 0, c.size.x, ctr.y - r), dark)
+		c.draw_rect(Rect2(0, ctr.y + r, c.size.x, c.size.y - ctr.y - r), dark)
+		c.draw_rect(Rect2(0, ctr.y - r, ctr.x - r, r * 2), dark)
+		c.draw_rect(Rect2(ctr.x + r, ctr.y - r, c.size.x - ctr.x - r, r * 2), dark)
+		# 圆外角落补黑
+		var steps := 48
+		for i in range(steps):
+			var a0 := TAU * i / steps
+			var a1 := TAU * (i + 1) / steps
+			var p0 := ctr + Vector2(cos(a0), sin(a0)) * r
+			var p1 := ctr + Vector2(cos(a1), sin(a1)) * r
+			var corner := ctr + (Vector2(cos((a0 + a1) / 2), sin((a0 + a1) / 2))) * r * 1.5
+			c.draw_colored_polygon(PackedVector2Array([p0, p1, corner]), dark)
+		c.draw_arc(ctr, r, 0, TAU, 64, Color(0, 0, 0, 0.9), 3.0)
+		c.draw_line(ctr - Vector2(r, 0), ctr + Vector2(r, 0), Color(0, 0, 0, 0.8), 1.0)
+		c.draw_line(ctr - Vector2(0, r), ctr + Vector2(0, r), Color(0, 0, 0, 0.8), 1.0)
+		return
 	var col := Color8(0x3f, 0xe0, 0xd8)
 	for off: Vector2 in [Vector2(0, -10), Vector2(0, 4), Vector2(-10, 0), Vector2(4, 0)]:
 		var a: Vector2 = ctr + off
@@ -809,6 +836,9 @@ func _process(dt: float) -> void:
 	if p.knife_ult > 0:
 		ammo_num.text = "%d 飞刃" % p.knife_ult
 		weap_name.text = "锋刃风暴"
+	elif p.arrow_ult > 0:
+		ammo_num.text = "%d 能量矢" % p.arrow_ult
+		weap_name.text = "猎杀之矢（穿墙）"
 	elif p.rocket_ult > 0:
 		ammo_num.text = "%d 火箭弹" % p.rocket_ult
 		weap_name.text = "毁灭者火箭"

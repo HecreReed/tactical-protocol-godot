@@ -15,7 +15,8 @@ var def_posts: Array = []         # [{p:Vector3, look:Vector3}]
 var atk_holds: Dictionary = {}    # site -> [{p,look}]
 var stages: Dictionary = {}
 var nav_region: Node3D
-var astar: AStarGrid2D
+var astar: AStar3D
+var _nav_cells: Dictionary = {}
 var _boxes: Array = []            # 碰撞盒 [{min:Vector3,max:Vector3}] 用于导航格judge
 
 static func load_all() -> Dictionary:
@@ -183,26 +184,18 @@ func build(map_dict: Dictionary, world: float) -> void:
 		stages[k] = Vector3(md["stages"][k][0], 0, md["stages"][k][1])
 
 	# ---- 光幕（购买阶段） ----
+	build_barriers()
+
+	# ---- 多层网格导航（对齐网页版：每格采样可站高度——地面/楼梯/高台/桥面，按高度差连边） ----
+	_bake_nav(open, world)
+
+func build_barriers() -> void:
+	remove_barriers()
 	for b in md["barriers"]:
 		var rect: Array = b["rect"]
 		var body := _box(self, Vector3((rect[0] + rect[2]) / 2.0, 2, (rect[1] + rect[3]) / 2.0), Vector3(rect[2] - rect[0], 4, rect[3] - rect[1]), _barrier_mat(b["side"] == "atk"), true, true)
 		body.collision_layer = 8      # 光幕专用层：挡人不进导航烘焙
 		barriers.append(body)
-
-	# ---- 网格导航（移植网页版：1m 格 + 对角连通，AStarGrid2D C++ 高速） ----
-	var nhalf := int(world / 2.0)
-	astar = AStarGrid2D.new()
-	astar.region = Rect2i(-nhalf, -nhalf, int(world), int(world))
-	astar.cell_size = Vector2(1, 1)
-	astar.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
-	astar.update()
-	for gx in range(-nhalf, nhalf):
-		for gz in range(-nhalf, nhalf):
-			var cx := gx + 0.5
-			var cz := gz + 0.5
-			var walkable := _in_open(open, cx, cz) and not _cell_blocked(cx, cz)
-			if not walkable:
-				astar.set_point_solid(Vector2i(gx, gz), true)
 
 func remove_barriers() -> void:
 	for b in barriers:
@@ -221,26 +214,104 @@ func _cell_blocked(x: float, z: float) -> bool:
 	return false
 
 func nav_path(from: Vector3, to: Vector3) -> PackedVector2Array:
-	var a := _nearest_cell(from)
-	var b := _nearest_cell(to)
-	return astar.get_point_path(a, b, true)
+	var a := _nearest_nav_id(from)
+	var b := _nearest_nav_id(to)
+	var out := PackedVector2Array()
+	if a < 0 or b < 0:
+		return out
+	var pts := astar.get_point_path(a, b, true)
+	for p in pts:
+		out.append(Vector2(p.x, p.z))
+	return out
 
-func _nearest_cell(p: Vector3) -> Vector2i:
-	var c := Vector2i(floori(p.x), floori(p.z))
+func _nearest_nav_id(pos: Vector3) -> int:
 	var half := int(world_size / 2.0)
-	c.x = clampi(c.x, -half, half - 1)
-	c.y = clampi(c.y, -half, half - 1)
-	if not astar.is_point_solid(c):
-		return c
-	for r in range(1, 8):
-		for dx in range(-r, r + 1):
-			for dz in range(-r, r + 1):
-				if absi(dx) != r and absi(dz) != r:
+	var gx := clampi(int(floor(pos.x)), -half, half - 1)
+	var gz := clampi(int(floor(pos.z)), -half, half - 1)
+	for radius in range(0, 9):
+		var best := -1
+		var bd := 1e9
+		for dx in range(-radius, radius + 1):
+			for dz in range(-radius, radius + 1):
+				if maxi(abs(dx), abs(dz)) != radius:
 					continue
-				var q := Vector2i(clampi(c.x + dx, -half, half - 1), clampi(c.y + dz, -half, half - 1))
-				if not astar.is_point_solid(q):
-					return q
-	return c
+				var key: int = (gx + dx + 2048) * 4096 + (gz + dz + 2048)
+				if _nav_cells.has(key):
+					for id in _nav_cells[key]:
+						var p: Vector3 = astar.get_point_position(id)
+						var d: float = Vector2(p.x - pos.x, p.z - pos.z).length() + absf(p.y - pos.y) * 1.5
+						if d < bd:
+							bd = d
+							best = id
+		if best >= 0:
+			return best
+	return -1
+
+func _cell_heights(cx: float, cz: float) -> Array:
+	# 该格所有可站高度：地面 0 + 覆盖此格的实体顶面（≤3.2m），要求 1.8m 头顶净空
+	var cands: Array = [0.0]
+	for b in _boxes:
+		var bmin: Vector3 = b["min"]
+		var bmax: Vector3 = b["max"]
+		if cx > bmin.x - 0.35 and cx < bmax.x + 0.35 and cz > bmin.z - 0.35 and cz < bmax.z + 0.35:
+			if bmax.y <= 3.2 and bmax.y > 0.12:
+				cands.append(bmax.y)
+	var out: Array = []
+	for h in cands:
+		var ok := true
+		for b in _boxes:
+			var bmin: Vector3 = b["min"]
+			var bmax: Vector3 = b["max"]
+			if cx > bmin.x - 0.3 and cx < bmax.x + 0.3 and cz > bmin.z - 0.3 and cz < bmax.z + 0.3:
+				if bmin.y < h + 1.75 and bmax.y > h + 0.25:
+					ok = false
+					break
+		if ok:
+			var dup := false
+			for h2 in out:
+				if absf(h2 - h) < 0.3:
+					dup = true
+					break
+			if not dup:
+				out.append(h)
+	return out
+
+func _bake_nav(open: Array, world: float) -> void:
+	var half := int(world / 2.0)
+	astar = AStar3D.new()
+	_nav_cells = {}
+	var next_id := 0
+	for gx in range(-half, half):
+		for gz in range(-half, half):
+			var cx := gx + 0.5
+			var cz := gz + 0.5
+			if not _in_open(open, cx, cz):
+				continue
+			var hs := _cell_heights(cx, cz)
+			if hs.is_empty():
+				continue
+			var ids: Array = []
+			for h in hs:
+				astar.add_point(next_id, Vector3(cx, h, cz))
+				ids.append(next_id)
+				next_id += 1
+			_nav_cells[(gx + 2048) * 4096 + (gz + 2048)] = ids
+	# 连边：四邻 + 对角，高度差 ≤1.05（台阶/楼梯可走，高台需经楼梯）
+	for gx in range(-half, half):
+		for gz in range(-half, half):
+			var key: int = (gx + 2048) * 4096 + (gz + 2048)
+			if not _nav_cells.has(key):
+				continue
+			for off in [[1, 0], [0, 1], [1, 1], [1, -1]]:
+				var nkey: int = (gx + int(off[0]) + 2048) * 4096 + (gz + int(off[1]) + 2048)
+				if not _nav_cells.has(nkey) or nkey == key:
+					continue
+				for id_a in _nav_cells[key]:
+					var pa: Vector3 = astar.get_point_position(id_a)
+					for id_b in _nav_cells[nkey]:
+						var pb: Vector3 = astar.get_point_position(id_b)
+						if absf(pa.y - pb.y) <= 1.05:
+							astar.connect_points(id_a, id_b)
 
 func in_site(pos: Vector3) -> String:
 	for key in sites.keys():
