@@ -492,9 +492,17 @@ func _ability_input(ev: InputEvent, k: String) -> void:
 		p.money = mini(9000, p.money + def["cost"])
 	_refresh_buy()
 
+func close_buy() -> void:
+	if not buy_open:
+		return
+	buy_open = false
+	buy_panel.visible = false
+	if not pause_open:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
 func toggle_buy() -> void:
 	if main.match_mgr.phase != "buy":
-		buy_panel.visible = false
+		close_buy()
 		return
 	buy_open = not buy_open
 	buy_panel.visible = buy_open

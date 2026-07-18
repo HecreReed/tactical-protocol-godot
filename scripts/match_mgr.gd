@@ -16,6 +16,7 @@ var score := { "ally": 0, "enemy": 0 }
 var ally_side := "atk"
 var spike_state := "carried"     # carried / planted / dropped
 var spike_carrier: Node = null
+var spike_claimer: Node = null
 var spike_pos := Vector3.ZERO
 var spike_prog := 0.0
 var defuse_prog := 0.0
@@ -84,6 +85,7 @@ func start_round() -> void:
 	spike_prog = 0.0
 	defuse_prog = 0.0
 	execute_called = false
+	spike_claimer = null
 	var site_keys: Array = main.map.sites.keys()
 	plan_site = site_keys.pick_random()
 	main.map_rebuild_barriers()
@@ -132,11 +134,12 @@ func _process(_dt: float) -> void:
 				t_phase = n + ROUND_TIME
 				main.map.remove_barriers()
 				main.hud.banner("行动开始")
+				main.hud.close_buy()
 				main.sfx.play("round_start")
 		"live":
 			if n >= t_phase:
 				end_round("def", "时间耗尽")
-			elif n >= live_start + 12.0 and not execute_called:
+			elif n >= live_start + 20.0 and not execute_called:
 				execute_called = true
 			_check_elim()
 		"planted":
@@ -281,27 +284,62 @@ func bot_think(bot: Node, n: float) -> void:
 		return
 	if phase == "planted":
 		if side == "def":
-			if bot.state != "defuse":
-				bot.state = "defuse"
-				bot.set_goal(spike_pos)
-			if bot.global_position.distance_to(spike_pos) < 2.0:
-				defuse_tick(bot, 0.15)
+			# 第一位活着的防守 bot 负责拆包，其余人在附近掩护架枪
+			var defuser: Node = null
+			for e in main.combatants():
+				if e.alive and side_of(e) == "def" and e != main.player:
+					defuser = e
+					break
+			if bot == defuser:
+				if bot.state != "defuse":
+					bot.state = "defuse"
+					bot.set_goal(spike_pos)
+				var safe: bool = bot.target == null and n - bot.last_hurt_at > 1.5
+				if bot.global_position.distance_to(spike_pos) < 2.0 and safe:
+					defuse_tick(bot, 0.15)
+			else:
+				if bot.state != "cover":
+					bot.state = "cover"
+					var ang := randf() * TAU
+					bot.set_goal(spike_pos + Vector3(cos(ang) * 7.0, 0, sin(ang) * 7.0))
+					bot.hold_look = spike_pos
 		else:
 			_assign_post_plant_hold(bot)
 		return
 	if phase != "live":
 		return
-	# 拾取掉落炸弹
+	# 拾取掉落炸弹：单人认领（web 版 sp.claimer），其他人继续任务
 	if side == "atk" and spike_state == "dropped":
-		if bot.state != "fetch":
-			bot.state = "fetch"
-			bot.set_goal(spike_pos)
-		if bot.global_position.distance_to(spike_pos) < 1.6:
-			spike_carrier = bot
-			spike_state = "carried"
-			bot.state = "wait"
-		return
+		if spike_claimer == null or not is_instance_valid(spike_claimer) or not spike_claimer.alive:
+			spike_claimer = bot
+		if spike_claimer == bot:
+			if bot.state != "fetch":
+				bot.state = "fetch"
+				bot.set_goal(spike_pos)
+			if bot.global_position.distance_to(spike_pos) < 1.6:
+				spike_carrier = bot
+				spike_state = "carried"
+				spike_claimer = null
+				bot.state = "wait"
+			return
 	if side == "atk":
+		# 残血刚受伤且非携弹者：回撤找队友（更像人）
+		if bot.hp < 32 and n - bot.last_hurt_at < 2.5 and not bot.fell_back and spike_carrier != bot and bot.state != "fallback":
+			bot.fell_back = true
+			bot.state = "fallback"
+			bot.fallback_until = n + randf_range(3.5, 5.5)
+			var dest := Vector3(bot.global_position.x * 0.5, 0, clampf(bot.global_position.z + 16.0, -36.0, 36.0))
+			for e in main.combatants():
+				if e != bot and e.alive and e.team == bot.team and e.global_position.distance_to(bot.global_position) > 6.0:
+					dest = e.global_position
+					break
+			bot.set_goal(dest)
+			return
+		if bot.state == "fallback":
+			if n > bot.fallback_until or bot.hp > 55:
+				bot.state = "wait"
+			else:
+				return
 		if spike_carrier == bot:
 			var plant: Vector3 = main.map.sites[plan_site]["plant"]
 			if main.map.in_site(bot.global_position) == plan_site and bot.global_position.distance_to(plant) < 4.5:
@@ -315,22 +353,36 @@ func bot_think(bot: Node, n: float) -> void:
 		else:
 			if execute_called:
 				var holds: Array = main.map.atk_holds.get(plan_site, [])
-				if holds.size() > 0 and bot.state != "execute":
+				if holds.size() > 0 and bot.state != "execute" and bot.state != "hold":
 					bot.state = "execute"
 					var h: Dictionary = holds[bot.get_instance_id() % holds.size()]
 					bot.set_goal(h["p"])
 					bot.hold_look = h["look"]
+				elif bot.state == "execute" and bot.nav_finished():
+					bot.state = "hold"
 			elif bot.state == "wait":
 				bot.state = "advance"
 				var st: Vector3 = main.map.stages.get(plan_site, main.map.sites[plan_site]["plant"])
-				bot.set_goal(st)
-			elif bot.state == "advance" and bot.nav_finished() and n >= bot.next_regroup:
-				# 到位后不再原地发呆：护送炸弹手 / 绕集结点游走
-				bot.next_regroup = n + randf_range(2.0, 3.5)
-				var anchor: Vector3 = main.map.stages.get(plan_site, main.map.sites[plan_site]["plant"])
-				if spike_carrier != null and is_instance_valid(spike_carrier) and spike_carrier.alive:
-					anchor = spike_carrier.global_position
-				bot.set_goal(anchor + Vector3(randf_range(-4.0, 4.0), 0, randf_range(-4.0, 4.0)))
+				bot.set_goal(st + Vector3(randf_range(-3.0, 3.0), 0, randf_range(-3.0, 3.0)))
+			elif bot.state == "advance" and bot.nav_finished():
+				bot.state = "stage"
+				bot.stage_at = n
+			elif bot.state == "stage":
+				# 集结：足够队友到场或超时 → 全队执行（web 版 executeT 逻辑）
+				var stage_pos: Vector3 = main.map.stages.get(plan_site, main.map.sites[plan_site]["plant"])
+				var mates := 0
+				var near := 0
+				for e in main.combatants():
+					if e.alive and side_of(e) == "atk" and e != main.player:
+						mates += 1
+						if e.global_position.distance_to(stage_pos) < 13.0:
+							near += 1
+				if near >= maxi(1, int(ceil(mates * 0.6))) or n - bot.stage_at > 5.0:
+					execute_called = true
+				elif n >= bot.next_regroup:
+					# 集结等待时小范围游走警戒
+					bot.next_regroup = n + randf_range(2.0, 3.5)
+					bot.set_goal(stage_pos + Vector3(randf_range(-4.0, 4.0), 0, randf_range(-4.0, 4.0)))
 	else:
 		_assign_def_post(bot)
 		# 长时间无事：小概率轮换驻点，保持地图控制

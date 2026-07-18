@@ -347,7 +347,11 @@ func _physics_process(dt: float) -> void:
 		if Ab.cast(main, self, ck):
 			main.sfx.play("ability")
 		return
-	if Input.is_action_pressed("fire") and main.can_fight() and now >= weapon["next_fire"] and weapon["reload_end"] == 0.0:
+	var fire_held := Input.is_action_pressed("fire")
+	var fire_tap := Input.is_action_just_pressed("fire")
+	var wants_fire: bool = fire_held if weapon["def"].get("auto", true) else fire_tap
+	if rocket_ult > 0 or knife_ult > 0: wants_fire = fire_held
+	if wants_fire and main.can_fight() and now >= weapon["next_fire"] and weapon["reload_end"] == 0.0:
 		if rocket_ult > 0:
 			rocket_ult -= 1
 			weapon["next_fire"] = now + 0.9

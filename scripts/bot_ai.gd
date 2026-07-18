@@ -57,6 +57,15 @@ var strafe_dir := 1.0
 var last_shot_at := -9.0
 var crouching := false
 var next_repath := 0.0
+var last_hurt_at := -9.0
+var fell_back := false
+var fallback_until := 0.0
+var stage_at := 0.0
+var wander_t := 0.0
+var wander_yaw := 0.0
+var wander_p := Vector3.ZERO
+var has_wander := false
+var spawn_anchor := Vector3.ZERO
 
 func setup(m: Node3D, t: String, aid: String) -> void:
 	main = m
@@ -138,7 +147,7 @@ func _think(now: float) -> void:
 		if best == null and target != null and is_instance_valid(target) and target.alive:
 			last_seen = target.global_position
 			hunt_until = now + 4.5
-			if state in ["wait", "advance", "hunt", "post"] and channel == "" and main.can_fight():
+			if state in ["wait", "advance", "hunt", "post", "stage"] and channel == "" and main.can_fight() and main.match_mgr.spike_carrier != self:
 				state = "hunt"
 				set_goal(last_seen)
 		target = best
@@ -171,6 +180,9 @@ func _think(now: float) -> void:
 				weapon = main.take_drop(d)
 				state = "wait"
 			return
+	if main.match_mgr.phase == "buy" and main.match_mgr.side_of(self) == "atk":
+		_buy_wander(now)
+		return
 	main.match_mgr.bot_think(self, now)
 	_util_abilities(now)
 
@@ -329,6 +341,7 @@ func take_damage(dmg: float, killer: Node = null, _hs: bool = false) -> void:
 	if main.now() < resist_until:
 		dmg *= 0.55
 	hp -= dmg
+	last_hurt_at = main.now()
 	# 受击反应：没有目标时转向攻击者并短暂追击
 	if hp > 0 and killer != null and is_instance_valid(killer) and "team" in killer and killer.team != team:
 		var kp: Vector3 = killer.global_position
@@ -356,6 +369,30 @@ func revive_at(pos: Vector3) -> void:
 	set_physics_process(true)
 	global_position = pos
 
+func _buy_wander(now: float) -> void:
+	# 购买阶段在出生区自由走动张望（web buyWander）
+	if now > wander_t:
+		wander_t = now + randf_range(1.5, 3.5)
+		if randf() < 0.35:
+			has_wander = false
+			wander_yaw = yaw + randf_range(-1.6, 1.6)
+		else:
+			has_wander = true
+			wander_p = spawn_anchor + Vector3(randf_range(-5, 5), 0, randf_range(-3.5, 3.5))
+	if has_wander:
+		var d := Vector2(wander_p.x - global_position.x, wander_p.z - global_position.z)
+		if d.length() < 0.6:
+			has_wander = false
+		else:
+			var dn := d.normalized()
+			yaw = lerp_angle(yaw, atan2(-dn.x, -dn.y), 0.1)
+			velocity.x = dn.x * SPEED * 0.42
+			velocity.z = dn.y * SPEED * 0.42
+			return
+	velocity.x *= 0.8
+	velocity.z *= 0.8
+	yaw = lerp_angle(yaw, wander_yaw, 0.05)
+
 func revive_reset(pos: Vector3) -> void:
 	revive_at(pos)
 	velocity = Vector3.ZERO
@@ -365,6 +402,9 @@ func revive_reset(pos: Vector3) -> void:
 	used_util = false
 	hunt_until = 0.0
 	next_regroup = 0.0
+	fell_back = false
+	has_wander = false
+	spawn_anchor = pos
 	goal = pos
 	path = PackedVector2Array()
 	path_i = 0
