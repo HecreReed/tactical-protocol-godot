@@ -12,7 +12,9 @@ var spawns_def: Array = []
 var def_posts: Array = []         # [{p:Vector3, look:Vector3}]
 var atk_holds: Dictionary = {}    # site -> [{p,look}]
 var stages: Dictionary = {}
-var nav_region: NavigationRegion3D
+var nav_region: Node3D
+var astar: AStarGrid2D
+var _boxes: Array = []            # 碰撞盒 [{min:Vector3,max:Vector3}] 用于导航格judge
 
 static func load_all() -> Dictionary:
 	var f := FileAccess.open("res://data/maps.json", FileAccess.READ)
@@ -25,7 +27,7 @@ func build(map_dict: Dictionary, world: float) -> void:
 	var accent := Color(md["accent"])
 	var ground := Color(md["ground"])
 
-	nav_region = NavigationRegion3D.new()
+	nav_region = Node3D.new()
 	add_child(nav_region)
 
 	# ---- 地面 ----
@@ -123,24 +125,61 @@ func build(map_dict: Dictionary, world: float) -> void:
 	for b in md["barriers"]:
 		var rect: Array = b["rect"]
 		var body := _box(self, Vector3((rect[0] + rect[2]) / 2.0, 2, (rect[1] + rect[3]) / 2.0), Vector3(rect[2] - rect[0], 4, rect[3] - rect[1]), _barrier_mat(b["side"] == "atk"), true, true)
+		body.collision_layer = 8      # 光幕专用层：挡人不进导航烘焙
 		barriers.append(body)
 
-	# ---- 导航烘焙 ----
-	var nm := NavigationMesh.new()
-	nm.geometry_parsed_geometry_type = NavigationMesh.PARSED_GEOMETRY_STATIC_COLLIDERS
-	nm.agent_radius = 0.5
-	nm.agent_height = 1.75
-	nm.agent_max_climb = 0.6
-	nm.cell_size = 0.25
-	nm.cell_height = 0.25
-	nav_region.navigation_mesh = nm
-	nav_region.bake_navigation_mesh(false)
+	# ---- 网格导航（移植网页版：1m 格 + 对角连通，AStarGrid2D C++ 高速） ----
+	var nhalf := int(world / 2.0)
+	astar = AStarGrid2D.new()
+	astar.region = Rect2i(-nhalf, -nhalf, int(world), int(world))
+	astar.cell_size = Vector2(1, 1)
+	astar.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
+	astar.update()
+	for gx in range(-nhalf, nhalf):
+		for gz in range(-nhalf, nhalf):
+			var cx := gx + 0.5
+			var cz := gz + 0.5
+			var walkable := _in_open(open, cx, cz) and not _cell_blocked(cx, cz)
+			if not walkable:
+				astar.set_point_solid(Vector2i(gx, gz), true)
 
 func remove_barriers() -> void:
 	for b in barriers:
 		if is_instance_valid(b):
 			b.queue_free()
 	barriers.clear()
+
+func _cell_blocked(x: float, z: float) -> bool:
+	for b in _boxes:
+		var bmin: Vector3 = b["min"]
+		var bmax: Vector3 = b["max"]
+		if bmax.y < 0.45 or bmin.y > 1.4:
+			continue
+		if x > bmin.x - 0.45 and x < bmax.x + 0.45 and z > bmin.z - 0.45 and z < bmax.z + 0.45:
+			return true
+	return false
+
+func nav_path(from: Vector3, to: Vector3) -> PackedVector2Array:
+	var a := _nearest_cell(from)
+	var b := _nearest_cell(to)
+	return astar.get_point_path(a, b)
+
+func _nearest_cell(p: Vector3) -> Vector2i:
+	var c := Vector2i(floori(p.x), floori(p.z))
+	var half := int(world_size / 2.0)
+	c.x = clampi(c.x, -half, half - 1)
+	c.y = clampi(c.y, -half, half - 1)
+	if not astar.is_point_solid(c):
+		return c
+	for r in range(1, 8):
+		for dx in range(-r, r + 1):
+			for dz in range(-r, r + 1):
+				if absi(dx) != r and absi(dz) != r:
+					continue
+				var q := Vector2i(clampi(c.x + dx, -half, half - 1), clampi(c.y + dz, -half, half - 1))
+				if not astar.is_point_solid(q):
+					return q
+	return c
 
 func in_site(pos: Vector3) -> String:
 	for key in sites.keys():
@@ -206,6 +245,8 @@ func _box(parent: Node, pos: Vector3, size: Vector3, mat: StandardMaterial3D, co
 		body.add_child(cs)
 		body.add_child(mi)
 		parent.add_child(body)
+		if not transparent:
+			_boxes.append({ "min": pos - size / 2.0, "max": pos + size / 2.0 })
 		return body
 	mi.position = pos
 	parent.add_child(mi)

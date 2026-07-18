@@ -1,0 +1,39 @@
+name: Build & Deploy Web
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Godot 4.6
+        run: |
+          wget -q https://github.com/godotengine/godot/releases/download/4.6-stable/Godot_v4.6-stable_linux.x86_64.zip
+          wget -q https://github.com/godotengine/godot/releases/download/4.6-stable/Godot_v4.6-stable_export_templates.tpz
+          unzip -q Godot_v4.6-stable_linux.x86_64.zip
+          mkdir -p ~/.local/share/godot/export_templates/4.6.stable
+          unzip -q Godot_v4.6-stable_export_templates.tpz -d /tmp/tpl
+          mv /tmp/tpl/templates/* ~/.local/share/godot/export_templates/4.6.stable/
+
+      - name: Import project
+        run: ./Godot_v4.6-stable_linux.x86_64 --headless --path . --import || true
+
+      - name: Export Web
+        run: |
+          mkdir -p build/web
+          ./Godot_v4.6-stable_linux.x86_64 --headless --path . --export-release "Web" build/web/index.html
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: build/web
+          force_orphan: true

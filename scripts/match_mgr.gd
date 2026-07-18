@@ -38,6 +38,14 @@ func side_of(ent: Node) -> String:
 	return "def" if ally_side == "atk" else "atk"
 
 func start_round() -> void:
+	# 战斗报告快照
+	report_text = ""
+	if not _report_dealt.is_empty():
+		report_text = "上回合战斗报告\n"
+		for nm in _report_dealt.keys():
+			report_text += "%s — 给予 %d 伤害\n" % [nm, int(_report_dealt[nm])]
+		_report_dealt.clear()
+	main.hud.on_round_start()
 	phase = "buy"
 	t_phase = now() + BUY_TIME
 	spike_state = "carried"
@@ -149,7 +157,23 @@ func end_round(winner_side: String, reason: String) -> void:
 func side_of_team(t: String) -> String:
 	return ally_side if t == "ally" else ("def" if ally_side == "atk" else "atk")
 
-func on_death(ent: Node, _killer: Node) -> void:
+var report_text := ""
+var _report_dealt := {}
+
+func record_damage(attacker: Node, victim: Node, dmg: float) -> void:
+	if attacker == main.player and victim != main.player:
+		var nm: String = victim.agent_name
+		_report_dealt[nm] = _report_dealt.get(nm, 0.0) + dmg
+
+func on_death(ent: Node, killer: Node) -> void:
+	if killer != null and is_instance_valid(killer) and killer != ent:
+		killer.kills += 1
+		killer.ult_points = mini(9, killer.ult_points + 1)
+		if "money" in killer:
+			killer.money = mini(9000, killer.money + 200)
+		var kn: String = killer.agent_name if "agent_name" in killer else "你"
+		var vn: String = ent.agent_name if "agent_name" in ent else "你"
+		main.hud.kill_msg("%s ✖ %s" % [kn, vn])
 	if ent == spike_carrier:
 		spike_carrier = null
 		spike_state = "dropped"
