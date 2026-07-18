@@ -6,11 +6,17 @@ config_version=5
 config/name="Tactical Protocol (Godot)"
 run/main_scene="res://scenes/Main.tscn"
 config/features=PackedStringArray("4.6")
+boot_splash/bg_color=Color(0.05, 0.09, 0.13, 1)
+boot_splash/show_image=false
 
 [display]
 
 window/size/viewport_width=1600
 window/size/viewport_height=900
+
+[gui]
+
+theme/custom_font="res://assets/fonts/NotoSansSC-sub.otf"
 
 [input]
 

@@ -44,6 +44,9 @@ var revealed_until := 0.0
 var knife_ult := 0
 var arrow_ult := 0
 var rocket_ult := 0
+var last_seen := Vector3.ZERO
+var hunt_until := 0.0
+var next_regroup := 0.0
 
 func setup(m: Node3D, t: String, aid: String) -> void:
 	main = m
@@ -150,11 +153,22 @@ func _think(now: float) -> void:
 			bd = score
 			best = e
 	if best != target:
+		# 丢失目标 → 短暂追击最后目击点（不打断关键任务状态）
+		if best == null and target != null and is_instance_valid(target) and target.alive:
+			last_seen = target.global_position
+			hunt_until = now + 4.5
+			if state in ["wait", "advance", "hunt", "post"] and channel == "" and main.can_fight():
+				state = "hunt"
+				set_goal(last_seen)
 		target = best
 		acq = 0.0
 	if target != null:
+		hunt_until = 0.0
 		_combat_abilities(now)
 		return
+	# 追击超时 → 回归任务
+	if state == "hunt" and (now > hunt_until or nav_finished()):
+		state = "wait"
 	# 弹尽：捡枪或拼刀
 	if weapon["ammo"] <= 0 and weapon["reserve"] <= 0:
 		var d: Dictionary = main.nearest_drop(global_position, 45.0)
@@ -281,6 +295,15 @@ func take_damage(dmg: float, killer: Node = null, _hs: bool = false) -> void:
 	if main.now() < resist_until:
 		dmg *= 0.55
 	hp -= dmg
+	# 受击反应：没有目标时转向攻击者并短暂追击
+	if hp > 0 and killer != null and is_instance_valid(killer) and "team" in killer and killer.team != team:
+		var kp: Vector3 = killer.global_position
+		yaw = atan2(-(kp.x - global_position.x), -(kp.z - global_position.z))
+		if target == null and channel == "" and state in ["wait", "advance", "hunt", "post"] and main.can_fight():
+			last_seen = kp
+			hunt_until = main.now() + 4.0
+			state = "hunt"
+			set_goal(kp)
 	if hp <= 0:
 		alive = false
 		deaths += 1
@@ -304,6 +327,12 @@ func revive_reset(pos: Vector3) -> void:
 	target = null
 	channel = ""
 	used_util = false
+	hunt_until = 0.0
+	next_regroup = 0.0
+	goal = pos
+	path = PackedVector2Array()
+	path_i = 0
+	hold_look = Vector3.ZERO
 	flash_until = 0.0
 	daze_until = 0.0
 	suppressed_until = 0.0

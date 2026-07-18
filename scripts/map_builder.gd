@@ -169,7 +169,7 @@ func _cell_blocked(x: float, z: float) -> bool:
 func nav_path(from: Vector3, to: Vector3) -> PackedVector2Array:
 	var a := _nearest_cell(from)
 	var b := _nearest_cell(to)
-	return astar.get_point_path(a, b)
+	return astar.get_point_path(a, b, true)
 
 func _nearest_cell(p: Vector3) -> Vector2i:
 	var c := Vector2i(floori(p.x), floori(p.z))

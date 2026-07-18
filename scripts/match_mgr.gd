@@ -269,10 +269,26 @@ func bot_think(bot: Node, n: float) -> void:
 					bot.hold_look = h["look"]
 			elif bot.state == "wait":
 				bot.state = "advance"
-				var st: Vector3 = main.map.stages.get(plan_site, Vector3.ZERO)
+				var st: Vector3 = main.map.stages.get(plan_site, main.map.sites[plan_site]["plant"])
 				bot.set_goal(st)
+			elif bot.state == "advance" and bot.nav_finished() and n >= bot.next_regroup:
+				# 到位后不再原地发呆：护送炸弹手 / 绕集结点游走
+				bot.next_regroup = n + randf_range(2.0, 3.5)
+				var anchor: Vector3 = main.map.stages.get(plan_site, main.map.sites[plan_site]["plant"])
+				if spike_carrier != null and is_instance_valid(spike_carrier) and spike_carrier.alive:
+					anchor = spike_carrier.global_position
+				bot.set_goal(anchor + Vector3(randf_range(-4.0, 4.0), 0, randf_range(-4.0, 4.0)))
 	else:
 		_assign_def_post(bot)
+		# 长时间无事：小概率轮换驻点，保持地图控制
+		if bot.state == "post" and bot.nav_finished() and n >= bot.next_regroup:
+			bot.next_regroup = n + randf_range(8.0, 14.0)
+			if randf() < 0.35:
+				var posts: Array = main.map.def_posts
+				if posts.size() > 1:
+					var p: Dictionary = posts[randi() % posts.size()]
+					bot.set_goal(p["p"])
+					bot.hold_look = p["look"]
 
 func _assign_def_post(bot: Node) -> void:
 	if bot.state == "post":
