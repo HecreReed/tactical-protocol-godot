@@ -107,29 +107,29 @@ func start_round() -> void:
 		else:
 			e.revive_reset(def_spawns[di % def_spawns.size()])
 			di += 1
-	# 携弹者 = 进攻方随机 bot
+	# 携弹者 = 进攻方随机成员（包括玩家，和网页版一致）
 	spike_carrier = null
+	var atk_members: Array = []
 	var roles := ["entry", "entry", "scout", "flank", "support"]
 	var ri := 0
 	for e in main.combatants():
-		if side_of(e) == "atk" and e != main.player and e.alive:
-			if spike_carrier == null:
-				spike_carrier = e
-			if "assault_role" in e:
+		if side_of(e) == "atk" and e.alive:
+			if e != main.player or not main.player.observer:
+				atk_members.append(e)
+			if e != main.player and "assault_role" in e:
 				e.assault_role = roles[ri % roles.size()]
 				ri += 1
+	if atk_members.size() > 0:
+		spike_carrier = atk_members.pick_random()
+		if spike_carrier == main.player:
+			main.hud.banner("你携带 SPIKE — 前往包点安放")
 	main.hud.banner("第 %d 回合 · %s" % [round_no, "进攻方" if ally_side == "atk" else "防守方"])
 
 func _reset_player(pos: Vector3) -> void:
 	var p = main.player
 	if p.observer:
 		return
-	p.alive = true
-	p.hp = 100
-	p.visible = true
-	p.global_position = pos
-	p.velocity = Vector3.ZERO
-	p.weapon["ammo"] = p.weapon["def"]["mag"]
+	p.revive_reset(pos)
 
 func _process(_dt: float) -> void:
 	var n := now()

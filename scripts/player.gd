@@ -530,14 +530,27 @@ func revive_reset(pos: Vector3) -> void:
 	global_position = pos
 	velocity = Vector3.ZERO
 	channel = ""
+	cast_mode = ""
+	ads = false
 	knife_ult = 0
 	rocket_ult = 0
+	arrow_ult = 0
+	spectate_idx = 0
+	spectating = null
 	flash_until = 0.0
 	daze_until = 0.0
+	slow_until = 0.0
 	suppressed_until = 0.0
-	weapon["ammo"] = weapon["def"]["mag"]
-	weapon["reserve"] = weapon["def"]["res"]
+	# 双枪弹药全部补满（存活继承武器，弹药每回合重置）
+	for w in [primary, secondary]:
+		if w.size() > 0:
+			w["ammo"] = w["def"]["mag"]
+			w["reserve"] = w["def"]["res"]
+			w["reload_end"] = 0.0
+			w["next_fire"] = 0.0
+	# 固有技能（免费 E 等）每回合回复
 	for k in ["c", "q", "e"]:
 		var sl: Dictionary = ability_slots[k]
 		if sl["def"]["cost"] == 0 and sl["n"] < sl["def"].get("max", 1):
 			sl["n"] = sl["def"].get("max", 1)
+		sl["cd_until"] = 0.0

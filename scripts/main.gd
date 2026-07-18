@@ -956,6 +956,10 @@ func spawn_ragdoll(ent: Node, from_dir: Vector3) -> void:
 	add_child(body)
 	body.global_position = ent.global_position + Vector3(0, 0.9, 0)
 	body.apply_impulse(from_dir * 180.0 + Vector3.UP * 100.0)
+	var wrr: WeakRef = weakref(body)
+	get_tree().create_timer(6.0).timeout.connect(func():
+		var b: Node = wrr.get_ref()
+		if b != null: b.queue_free())
 	body.apply_torque_impulse(Vector3(randf_range(-40, 40), 0, randf_range(-40, 40)))
 	var wr8: WeakRef = weakref(body)
 	get_tree().create_timer(8.0).timeout.connect(func():
