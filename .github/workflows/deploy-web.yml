@@ -26,6 +26,10 @@ jobs:
       - name: Import project
         run: |
           set -o pipefail
+          if ! ./Godot_v4.6-stable_linux.x86_64 --headless --path . --import > /tmp/import-bootstrap.log 2>&1; then
+            cat /tmp/import-bootstrap.log
+            exit 1
+          fi
           ./Godot_v4.6-stable_linux.x86_64 --headless --path . --import 2>&1 | tee /tmp/import.log
           if grep -qE "SCRIPT ERROR|ERROR:|Failed to load script|Parse Error|Compile Error" /tmp/import.log; then
             echo "::error::Godot import errors detected"

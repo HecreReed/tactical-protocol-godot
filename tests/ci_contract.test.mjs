@@ -20,6 +20,7 @@ test('web deployment fails closed and smokes every synchronized map', async () =
 
   assert.equal(catalog.maps.length, 16);
   assert.doesNotMatch(workflow, /--import\s*\|\|\s*true/);
+  assert.equal((workflow.match(/--import/g) ?? []).length, 2);
   assert.match(workflow, /bash tools\/smoke_maps\.sh/);
   assert.match(workflow, /--export-release "Web"/);
   assert.match(smoke, /data\/agents\.json/);
