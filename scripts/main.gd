@@ -37,9 +37,22 @@ var _fx_live := 0
 func now() -> float:
 	return _t
 
+static func menu_content_scale(window_size: Vector2i) -> float:
+	if window_size.x >= 700 or window_size.y <= window_size.x:
+		return 1.0
+	return clampf(1600.0 / maxf(float(window_size.x), 1.0), 1.0, 4.0)
+
+func _sync_content_scale() -> void:
+	var scale := menu_content_scale(DisplayServer.window_get_size())
+	var root_window := get_tree().root
+	if not is_equal_approx(root_window.content_scale_factor, scale):
+		root_window.content_scale_factor = scale
+
 func _ready() -> void:
 	print("[BOOT] main._ready")
 	_t = 0.0
+	_sync_content_scale()
+	get_tree().root.size_changed.connect(_sync_content_scale)
 	_build_menu()
 	print("[BOOT] menu built")
 	var auto := OS.get_environment("TP_AUTOSTART")

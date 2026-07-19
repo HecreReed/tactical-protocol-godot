@@ -116,6 +116,10 @@ func _test_catalog() -> void:
 	assert_eq(implementations.size(), 116, "ability implementation ids are unique")
 
 func _test_core_runtime() -> void:
+	assert_eq(MainScript.menu_content_scale(Vector2i(1280, 720)), 1.0, "desktop menu keeps native content scale")
+	assert_eq(MainScript.menu_content_scale(Vector2i(390, 844)), 4.0, "portrait menu expands to a readable mobile scale")
+	assert_eq(MainScript.menu_content_scale(Vector2i(844, 390)), 1.0, "landscape menu keeps native content scale")
+
 	var failed_slot := {"n": 1}
 	assert_false(Runtime.commit_ability(failed_slot, false), "failed cast is rejected")
 	assert_eq(failed_slot["n"], 1, "failed cast keeps its charge")

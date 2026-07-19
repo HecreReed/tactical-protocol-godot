@@ -24,18 +24,17 @@ jobs:
           mv /tmp/tpl/templates/* ~/.local/share/godot/export_templates/4.6.stable/
 
       - name: Import project
-        run: ./Godot_v4.6-stable_linux.x86_64 --headless --path . --import || true
-
-      - name: Smoke test (headless autostart, fail on script errors)
         run: |
-          TP_AUTOSTART=yiji timeout 600 ./Godot_v4.6-stable_linux.x86_64 --headless --path . --quit-after 9000 2>&1 | tee /tmp/smoke.log
-          if grep -qE "SCRIPT ERROR|Failed to load script|Parse Error" /tmp/smoke.log; then
-            echo "::error::Script errors detected in smoke test"
-            grep -B1 -A3 -E "SCRIPT ERROR|Failed to load script" /tmp/smoke.log | head -60
+          set -o pipefail
+          ./Godot_v4.6-stable_linux.x86_64 --headless --path . --import 2>&1 | tee /tmp/import.log
+          if grep -qE "SCRIPT ERROR|ERROR:|Failed to load script|Parse Error|Compile Error" /tmp/import.log; then
+            echo "::error::Godot import errors detected"
+            grep -B1 -A3 -E "SCRIPT ERROR|ERROR:|Failed to load script|Parse Error|Compile Error" /tmp/import.log | head -80
             exit 1
           fi
-          grep -q "\[BOOT\] menu built" /tmp/smoke.log || (echo "::error::Game did not boot" && exit 1)
-          grep -q "\[TP\] t=8" /tmp/smoke.log || (echo "::error::Match loop did not run" && exit 1)
+
+      - name: Smoke test all synchronized maps
+        run: bash tools/smoke_maps.sh ./Godot_v4.6-stable_linux.x86_64
 
       - name: Export Web
         run: |
