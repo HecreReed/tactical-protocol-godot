@@ -42,8 +42,11 @@ static func menu_content_scale(window_size: Vector2i) -> float:
 		return 1.0
 	return clampf(1600.0 / maxf(float(window_size.x), 1.0), 1.0, 4.0)
 
+static func content_scale(window_size: Vector2i, game_started: bool) -> float:
+	return 1.0 if game_started else menu_content_scale(window_size)
+
 func _sync_content_scale() -> void:
-	var scale := menu_content_scale(DisplayServer.window_get_size())
+	var scale := content_scale(DisplayServer.window_get_size(), started)
 	var root_window := get_tree().root
 	if not is_equal_approx(root_window.content_scale_factor, scale):
 		root_window.content_scale_factor = scale
@@ -75,6 +78,7 @@ var _diff_btns: Array = []
 var _sub_label: Label
 var _step1: VBoxContainer
 var _step2: VBoxContainer
+var _menu_scroll: ScrollContainer
 
 static func _card_sb(bg: Color, border: Color, bw: int = 1) -> StyleBoxFlat:
 	var s := StyleBoxFlat.new()
@@ -108,13 +112,13 @@ func _build_menu() -> void:
 	bg.color = MC_BG
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.add_child(bg)
-	var scroll := ScrollContainer.new()
-	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.add_child(scroll)
+	_menu_scroll = ScrollContainer.new()
+	_menu_scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.add_child(_menu_scroll)
 	var center := CenterContainer.new()
 	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.add_child(center)
+	_menu_scroll.add_child(center)
 	var v := VBoxContainer.new()
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.custom_minimum_size = Vector2(320, 0)
@@ -297,6 +301,8 @@ func _to_step(n: int) -> void:
 	_step1.visible = n == 1
 	_step2.visible = n == 2
 	_sub_label.text = "第 1 步 · 选择地图与难度" if n == 1 else "第 2 步 · 选择你的特工"
+	if is_instance_valid(_menu_scroll):
+		_menu_scroll.scroll_vertical = 0
 
 func _refresh_map_cards() -> void:
 	for mc in _map_cards:
@@ -315,6 +321,7 @@ func _start_game(map_id: String, agent_id: String, obs: bool = false) -> void:
 	if started:
 		return
 	started = true
+	_sync_content_scale()
 	observer = obs
 	if is_instance_valid(menu):
 		menu.queue_free()

@@ -135,6 +135,8 @@ func _test_core_runtime() -> void:
 	assert_eq(MainScript.menu_content_scale(Vector2i(1280, 720)), 1.0, "desktop menu keeps native content scale")
 	assert_eq(MainScript.menu_content_scale(Vector2i(390, 844)), 4.0, "portrait menu expands to a readable mobile scale")
 	assert_eq(MainScript.menu_content_scale(Vector2i(844, 390)), 1.0, "landscape menu keeps native content scale")
+	assert_eq(MainScript.content_scale(Vector2i(390, 844), false), 4.0, "mobile menu uses responsive scale")
+	assert_eq(MainScript.content_scale(Vector2i(390, 844), true), 1.0, "live match resets responsive menu scale")
 
 	var failed_slot := {"n": 1}
 	assert_false(Runtime.commit_ability(failed_slot, false), "failed cast is rejected")
@@ -251,6 +253,9 @@ func _test_utility_runtime() -> void:
 
 	var scout_world := MainScript.new()
 	root.add_child(scout_world)
+	scout_world._menu_scroll.scroll_vertical = 500
+	scout_world._to_step(2)
+	assert_eq(scout_world._menu_scroll.scroll_vertical, 0, "menu step change resets scroll position")
 	var scout_owner := FakeScoutOwner.new()
 	scout_world.add_child(scout_owner)
 	scout_world.player = scout_owner
