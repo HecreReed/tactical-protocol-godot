@@ -4,11 +4,86 @@ const Catalog := preload("res://scripts/agent_catalog.gd")
 const Runtime := preload("res://scripts/ability_runtime.gd")
 const Mechanics := preload("res://scripts/agent_mechanics.gd")
 const Abilities := preload("res://scripts/abilities.gd")
+const MainScript := preload("res://scripts/main.gd")
+
+class FakeScoutOwner:
+	extends CharacterBody3D
+	var team := "ally"
+	var alive := true
+	var resources := {"globules": {}}
+	var pitch := 0.0
+	var yaw := 0.0
+
+	func eye_pos() -> Vector3:
+		return global_position + Vector3.UP * 1.55
+
+	func aim_dir() -> Vector3:
+		return Vector3.FORWARD
+
+class FakeAbilityWorld:
+	extends RefCounted
+	var clock := 0.0
+	var ability_events: Array = []
+	var explosions: Array = []
+	var orbitals: Array = []
+	var scouts: Array = []
+	var fighters: Array = []
+	var slow_zones: Array = []
+	var legacy_units: Array[String] = []
+
+	func can_fight() -> bool:
+		return true
+
+	func now() -> float:
+		return clock
+
+	func combatants() -> Array:
+		return fighters
+
+	func explode(owner: Variant, point: Vector3, radius: float, near_damage: float, far_damage: float) -> void:
+		explosions.append({
+			"owner": owner, "point": point, "radius": radius,
+			"near": near_damage, "far": far_damage,
+		})
+
+	func orbital_strike(owner: Variant, origin: Vector3, direction: Vector3) -> void:
+		orbitals.append({"owner": owner, "point": origin, "direction": direction})
+
+	func orbital_strike_at(owner: Variant, point: Vector3) -> void:
+		orbitals.append({"owner": owner, "point": point})
+
+	func spawn_slow_zone(owner: Variant, point: Vector3, radius: float, duration: float) -> void:
+		slow_zones.append({
+			"owner": owner, "point": point, "radius": radius, "duration": duration,
+		})
+
+	func spawn_drone(_owner: Variant, _direction: Vector3) -> void:
+		legacy_units.append("drone")
+
+	func spawn_boom_bot(_owner: Variant, _direction: Vector3) -> void:
+		legacy_units.append("boombot")
+
+	func spawn_controlled_scout(
+		owner: Variant,
+		scout_type: String,
+		duration: float,
+		speed: float,
+		controlled: bool = true,
+		globule_key: String = "",
+		start_point: Variant = null,
+	) -> void:
+		scouts.append({
+			"owner": owner, "type": scout_type, "duration": duration, "speed": speed,
+			"controlled": controlled, "globule": globule_key, "start": start_point,
+		})
 
 var failures := 0
 var checks := 0
 
 func _init() -> void:
+	call_deferred("_run")
+
+func _run() -> void:
 	_test_catalog()
 	_test_core_runtime()
 	_test_utility_runtime()
@@ -130,6 +205,63 @@ func _test_utility_runtime() -> void:
 	assert_eq(state["control_mode"]["unit"], unit, "controlled unit handoff")
 	assert_eq(Runtime.end_control(state), owner, "control returns to owner")
 	assert_eq(state["control_mode"], null, "control mode clears")
+
+	unit = {"id": "trailblazer-1", "vel": Vector3.ZERO, "active": true}
+	Runtime.begin_control(state, owner, unit, 10.0)
+	assert_true(Runtime.steer_controlled_unit(
+		state, owner, 2.0, 0.2, Vector3.FORWARD, 1.0,
+	), "controlled unit accepts owner movement")
+	assert_eq(unit["vel"], Vector3.FORWARD * 8.0, "forward control uses upstream speed")
+	assert_false(Runtime.steer_controlled_unit(
+		state, owner, 10.0, 0.1, Vector3.FORWARD, 1.0,
+	), "expired controlled unit returns control")
+	assert_eq(state["control_mode"], null, "expired control mode clears")
+	assert_eq(Runtime.controlled_impact("trailblazer"), {
+		"daze_until": 3.0, "slow_until": 3.0, "ends_unit": true,
+	}, "Trailblazer impact contract")
+	assert_eq(Runtime.controlled_impact("thrash"), {
+		"suppressed_until": 6.0, "slow_until": 6.0, "ends_unit": true,
+	}, "Thrash impact contract")
+	assert_eq(Runtime.controlled_impact("prowler"), {
+		"flash_until": 2.5, "terror_trail_until": 6.0, "ends_unit": true,
+	}, "Prowler impact contract")
+	assert_eq(Runtime.controlled_impact("sova"), {
+		"reveal_radius": 10.0, "reveal_duration": 3.0, "ends_unit": false,
+	}, "generic scout impact reveals")
+
+	var scout_world := MainScript.new()
+	root.add_child(scout_world)
+	var scout_owner := FakeScoutOwner.new()
+	scout_world.add_child(scout_owner)
+	scout_world.player = scout_owner
+	var live_scout: Dictionary = scout_world.spawn_controlled_scout(
+		scout_owner, "trailblazer", 6.0, 8.0,
+	)
+	assert_eq(live_scout["kind"], "controlled_scout", "world keeps controlled unit family")
+	assert_eq(live_scout["scout_type"], "trailblazer", "world keeps scout identity")
+	assert_eq(live_scout["vel"], Vector3.FORWARD * 8.0, "world applies scout launch speed")
+	assert_true(live_scout in scout_world.devices, "world registers controlled scout")
+	assert_eq(scout_world.control_state["control_mode"]["unit"], live_scout, "player enters scout control")
+	assert_true(scout_world.is_controlling(scout_owner), "world reports active owner control")
+	scout_world.end_controlled_unit(scout_owner)
+	assert_eq(scout_world.control_state["control_mode"], null, "world returns control to player")
+	scout_world._t = 0.01
+	scout_world._tick_devices(0.01)
+	assert_false(live_scout in scout_world.devices, "ended controlled scout leaves device registry")
+
+	scout_world._t = 1.0
+	var gekko_scout: Dictionary = scout_world.spawn_controlled_scout(
+		scout_owner, "wingman", 1.0, 7.0, true, "wingman",
+	)
+	scout_world._t = 2.01
+	scout_world._tick_devices(0.01)
+	assert_false(gekko_scout in scout_world.devices, "expired Gekko scout leaves device registry")
+	assert_eq(scout_world.control_state["control_mode"], null, "expired Gekko scout returns control")
+	assert_true(
+		is_equal_approx(scout_owner.resources["globules"]["wingman"]["until"], 22.01),
+		"expired Gekko scout creates a twenty second reclaim window",
+	)
+	scout_world.free()
 
 	var point := Vector3(5, 0, 4)
 	assert_true(Runtime.valid_teleport_destination(
@@ -395,6 +527,146 @@ func _test_cast_contracts() -> void:
 	), "Bot cast uses common commit path")
 	assert_eq(actor["ability_slots"]["q"]["n"], 1, "successful Bot cast spends one charge")
 
+	var tejo := _cast_actor("tejo")
+	var salvo_world := FakeAbilityWorld.new()
+	salvo_world.clock = 10.0
+	var salvo := Abilities.start_cast(tejo, "e", salvo_world.clock, true)
+	assert_true(Abilities.confirm_cast(salvo_world, tejo, salvo), "Tejo Guided Salvo schedules")
+	assert_eq(salvo_world.explosions.size(), 0, "Guided Salvo does not explode immediately")
+	assert_eq(salvo_world.ability_events.size(), 2, "Guided Salvo schedules both targets")
+	Runtime.run_ability_events(salvo_world.ability_events, 11.19)
+	assert_eq(salvo_world.explosions.size(), 0, "Guided Salvo waits 1.2 seconds")
+	Runtime.run_ability_events(salvo_world.ability_events, 11.2)
+	assert_eq(salvo_world.explosions.size(), 2, "Guided Salvo lands both targets together")
+
+	var armageddon_world := FakeAbilityWorld.new()
+	armageddon_world.clock = 20.0
+	tejo = _cast_actor("tejo")
+	tejo["ult_points"] = int(Catalog.agent("tejo")["ultCost"])
+	var armageddon := Abilities.start_cast(tejo, "x", armageddon_world.clock, true)
+	assert_true(Abilities.confirm_cast(armageddon_world, tejo, armageddon), "Tejo Armageddon schedules")
+	assert_eq(armageddon_world.orbitals.size(), 0, "Armageddon does not strike immediately")
+	assert_eq(armageddon_world.ability_events.size(), 6, "Armageddon schedules six advancing strikes")
+	Runtime.run_ability_events(armageddon_world.ability_events, 20.44)
+	assert_eq(armageddon_world.orbitals.size(), 0, "Armageddon waits for first warning")
+	Runtime.run_ability_events(armageddon_world.ability_events, 20.45)
+	assert_eq(armageddon_world.orbitals.size(), 1, "Armageddon first strike lands at 0.45 seconds")
+	assert_eq(armageddon_world.orbitals[0]["point"], Vector3(1, 0, -3), "Armageddon advances five metres")
+	armageddon_world.ability_events.clear()
+
+	var scout_world := FakeAbilityWorld.new()
+	var scout_casts := [
+		["sova", "c"], ["cypher", "e"], ["fade", "c"],
+		["gekko", "q"], ["gekko", "e"], ["gekko", "x"],
+		["tejo", "c"], ["skye", "q"], ["yoru", "c"],
+	]
+	for entry in scout_casts:
+		var scout_actor := _cast_actor(entry[0])
+		if entry[1] == "x":
+			scout_actor["ult_points"] = int(Catalog.agent(entry[0])["ultCost"])
+		var scout_cast := Abilities.start_cast(scout_actor, entry[1], 1.0, true)
+		assert_true(Abilities.confirm_cast(scout_world, scout_actor, scout_cast), "%s scout cast" % entry[0])
+	assert_eq(scout_world.legacy_units, [], "official scouts never use legacy drone/boombot proxies")
+	assert_eq(scout_world.scouts.size(), 9, "all nine scout abilities keep distinct units")
+	if scout_world.scouts.size() == 9:
+		var expected_scouts := [
+			["sova", 8.0, 7.0, true, ""], ["camera", 12.0, 0.0, false, ""],
+			["prowler", 6.0, 8.0, true, ""], ["wingman", 7.0, 7.0, true, "wingman"],
+			["dizzy", 5.0, 5.0, true, "dizzy"], ["thrash", 8.0, 9.0, true, "thrash"],
+			["tejo", 8.0, 7.0, true, ""], ["trailblazer", 6.0, 8.0, true, ""],
+			["decoy", 10.0, 6.0, false, ""],
+		]
+		for index in expected_scouts.size():
+			var actual: Dictionary = scout_world.scouts[index]
+			var expected: Array = expected_scouts[index]
+			assert_eq(actual["type"], expected[0], "scout %d type" % index)
+			assert_eq(actual["duration"], expected[1], "scout %d duration" % index)
+			assert_eq(actual["speed"], expected[2], "scout %d speed" % index)
+			assert_eq(actual["controlled"], expected[3], "scout %d control mode" % index)
+			assert_eq(actual["globule"], expected[4], "scout %d globule" % index)
+
+	var reyna := _cast_actor("reyna")
+	reyna["resources"]["soul_orbs"] = [{"until": 13.0}]
+	var reyna_world := FakeAbilityWorld.new()
+	reyna_world.clock = 10.0
+	var devour := Abilities.start_cast(reyna, "q", reyna_world.clock, true)
+	assert_true(Abilities.confirm_cast(reyna_world, reyna, devour), "Reyna Devour consumes a live soul")
+	assert_eq(reyna["heal_queue"], 100.0, "Reyna Devour queues full healing")
+	assert_eq(reyna["armor"], 25.0, "Reyna Devour grants 25 armor")
+
+	var harbor := _cast_actor("harbor")
+	var storm_target := _actor("sage")
+	storm_target["team"] = "enemy"
+	storm_target["pos"] = Vector3(1, 0, -10)
+	storm_target["flash_until"] = 0.0
+	var harbor_world := FakeAbilityWorld.new()
+	harbor_world.clock = 10.0
+	harbor_world.fighters = [harbor, storm_target]
+	var storm := Abilities.start_cast(harbor, "c", harbor_world.clock, true)
+	assert_true(Abilities.confirm_cast(harbor_world, harbor, storm), "Harbor Storm Surge schedules")
+	assert_eq(harbor_world.slow_zones.size(), 0, "Storm Surge waits through warning")
+	Runtime.run_ability_events(harbor_world.ability_events, 10.89)
+	assert_eq(harbor_world.slow_zones.size(), 0, "Storm Surge does not land before 0.9 seconds")
+	Runtime.run_ability_events(harbor_world.ability_events, 10.9)
+	assert_eq(harbor_world.slow_zones.size(), 1, "Storm Surge creates its slow zone")
+	assert_eq(storm_target["flash_until"], 12.9, "Storm Surge flashes enemies in its radius")
+
+	var fade := _cast_actor("fade")
+	var seized := _actor("sage")
+	seized["team"] = "enemy"
+	seized["pos"] = Vector3(1, 0, -10)
+	var fade_world := FakeAbilityWorld.new()
+	fade_world.clock = 20.0
+	fade_world.fighters = [fade, seized]
+	var seize := Abilities.start_cast(fade, "q", fade_world.clock, true)
+	assert_true(Abilities.confirm_cast(fade_world, fade, seize), "Fade Seize schedules")
+	assert_false(seized["ability_state"].has("tether"), "Fade Seize waits through warning")
+	Runtime.run_ability_events(fade_world.ability_events, 20.69)
+	assert_eq(seized["hp"], 100.0, "Fade Seize does not decay health early")
+	Runtime.run_ability_events(fade_world.ability_events, 20.7)
+	assert_eq(seized["hp"], 75.0, "Fade Seize caps current health at 75")
+	assert_eq(seized["slow_until"], 25.7, "Fade Seize slows for five seconds")
+	assert_eq(seized["ability_state"]["tether"]["until"], 25.7, "Fade Seize tethers for five seconds")
+
+	var deadlock := _cast_actor("deadlock")
+	deadlock["ult_points"] = int(Catalog.agent("deadlock")["ultCost"])
+	var cocooned := _actor("sage")
+	cocooned["team"] = "enemy"
+	cocooned["pos"] = Vector3(1, 0, -8)
+	cocooned["slow_until"] = 0.0
+	cocooned["suppressed_until"] = 0.0
+	var deadlock_world := FakeAbilityWorld.new()
+	deadlock_world.clock = 30.0
+	deadlock_world.fighters = [deadlock, cocooned]
+	var annihilation := Abilities.start_cast(deadlock, "x", deadlock_world.clock, true)
+	assert_true(Abilities.confirm_cast(deadlock_world, deadlock, annihilation), "Deadlock Annihilation finds a target")
+	assert_true(cocooned["ability_state"].has("cocoon"), "Annihilation applies cocoon state")
+	assert_eq(cocooned["slow_until"], 37.0, "Annihilation slows for seven seconds")
+	assert_eq(cocooned["suppressed_until"], 37.0, "Annihilation suppresses for seven seconds")
+	Runtime.run_ability_events(deadlock_world.ability_events, 36.99)
+	assert_true(cocooned["alive"], "Annihilation target survives before seven seconds")
+	Runtime.run_ability_events(deadlock_world.ability_events, 37.0)
+	assert_false(cocooned["alive"], "Annihilation kills an attached target after seven seconds")
+
+	var iso := _cast_actor("iso")
+	iso["ult_points"] = int(Catalog.agent("iso")["ultCost"])
+	var duelist := _actor("sage")
+	duelist["team"] = "enemy"
+	duelist["pos"] = Vector3(41, 0, 2)
+	duelist["revealed_until"] = 0.0
+	var iso_world := FakeAbilityWorld.new()
+	iso_world.clock = 40.0
+	iso_world.fighters = [iso, duelist]
+	var contract := Abilities.start_cast(iso, "x", iso_world.clock, true)
+	assert_true(Abilities.confirm_cast(iso_world, iso, contract), "Iso Kill Contract selects the nearest living enemy")
+	assert_true(iso["ability_state"].has("duel"), "Kill Contract marks Iso's duel target")
+	assert_true(duelist["ability_state"].has("duel"), "Kill Contract marks the enemy's duel target")
+	if iso["ability_state"].has("duel") and duelist["ability_state"].has("duel"):
+		assert_eq(iso["ability_state"]["duel"]["target"], duelist, "Iso duel points to enemy")
+		assert_eq(duelist["ability_state"]["duel"]["target"], iso, "enemy duel points to Iso")
+		assert_eq(iso["ability_state"]["duel"]["until"], 55.0, "Iso duel lasts fifteen seconds")
+	assert_eq(duelist["revealed_until"], 55.0, "Kill Contract reveals the enemy for the duel")
+
 func _test_combat_and_round_integration() -> void:
 	var iso := _actor("iso")
 	iso["ability_state"]["iso_shield"] = true
@@ -440,22 +712,33 @@ func _test_bot_intents() -> void:
 	assert_eq(intents.size(), 10, "upstream exposes ten ability intents")
 	assert_eq(Abilities.supported_intents().size(), 10, "Bot supports exactly upstream intents")
 
-	for agent_id in Catalog.agent_ids():
-		var order := Abilities.bot_ability_order(agent_id, {
-			"side": "atk", "state": "execute", "in_combat": true, "low_hp": false,
-		})
-		assert_eq(order.size(), 4, "%s Bot sees all slots" % agent_id)
-		var unique_order := {}
-		for ordered_key in order:
-			unique_order[ordered_key] = true
-		assert_eq(unique_order.size(), 4, "%s Bot slot order is unique" % agent_id)
-		for key in ["c", "q", "e", "x"]:
-			assert_true(key in order, "%s Bot can consider %s" % [agent_id, key])
+	assert_eq(Abilities.bot_utility_intent({"enemy_channeling": true}), "deny", "channel denial intent")
+	assert_eq(Abilities.bot_utility_intent({"hurt": true, "safe_escape": true}), "escape", "hurt escape intent")
+	assert_eq(Abilities.bot_utility_intent({"retaking": true, "contact_confidence": 0.2}), "info", "retake info intent")
+	assert_eq(Abilities.bot_utility_intent({"executing": true, "dangerous_sightline": true}), "cover", "execute cover intent")
+	assert_eq(Abilities.bot_utility_intent({"executing": true}), "entry", "execute entry intent")
+	assert_eq(Abilities.bot_utility_intent({}), "hold", "default hold intent")
 
-	var sage_order := Abilities.bot_ability_order("sage", {
-		"side": "def", "state": "post", "in_combat": true, "low_hp": true,
-	})
-	assert_eq(sage_order[0], "e", "low-health Sage prioritizes heal")
+	assert_eq(Abilities.bot_ability_order("astra", {
+		"in_combat": true, "executing": false, "enemy_channeling": false,
+		"tactical_intent": "hold",
+	}), ["x", "e", "q", "c"], "combat uses upstream X/E/Q/C order")
+	assert_eq(Abilities.bot_ability_order("sage", {
+		"in_combat": true, "hurt": true, "safe_time": true,
+		"executing": false, "enemy_channeling": false, "tactical_intent": "hold",
+	}), ["x", "e", "q"], "Sage filters heal and combat intents")
+	assert_eq(Abilities.bot_ability_order("omen", {
+		"in_combat": true, "hurt": true, "safe_time": false,
+		"executing": false, "enemy_channeling": false, "tactical_intent": "escape",
+	}), ["x", "q", "c"], "Omen considers escape only under escape intent")
+	assert_eq(Abilities.bot_ability_order("chamber", {
+		"state": "hold", "in_combat": false, "executing": false,
+		"enemy_channeling": false, "tactical_intent": "hold", "has_primary": true,
+	}), ["c"], "out-of-combat Chamber only considers setup")
+	assert_eq(Abilities.bot_ability_order("sova", {
+		"state": "execute", "in_combat": false, "executing": true,
+		"enemy_channeling": false, "tactical_intent": "entry", "team_role": "info",
+	}), ["x", "e", "q", "c"], "executing info Bot considers all eligible Sova slots")
 
 func _actor(agent_id: String) -> Dictionary:
 	return {

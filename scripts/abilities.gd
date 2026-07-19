@@ -6,6 +6,7 @@ const Runtime := preload("res://scripts/ability_runtime.gd")
 const Mechanics := preload("res://scripts/agent_mechanics.gd")
 const Weapons := preload("res://scripts/weapons.gd")
 const SLOT_KEYS := ["c", "q", "e", "x"]
+const BOT_SLOT_ORDER := ["x", "e", "q", "c"]
 const SUPPORTED_INTENTS := [
 	"entry", "cover", "control", "damage", "escape", "heal", "info", "setup", "weapon", "ultimate",
 ]
@@ -66,29 +67,47 @@ static func supported_intents() -> Array[String]:
 	result.assign(SUPPORTED_INTENTS)
 	return result
 
+static func bot_utility_intent(context: Dictionary) -> String:
+	if bool(context.get("enemy_channeling", false)):
+		return "deny"
+	if bool(context.get("hurt", false)) and bool(context.get("safe_escape", false)):
+		return "escape"
+	if bool(context.get("retaking", false)) and float(context.get("contact_confidence", 0.0)) < 0.55:
+		return "info"
+	if bool(context.get("executing", false)) and bool(context.get("dangerous_sightline", false)):
+		return "cover"
+	if bool(context.get("executing", false)):
+		return "entry"
+	return "hold"
+
 static func bot_ability_order(agent_id: String, context: Dictionary) -> Array[String]:
 	if not Catalog.has_agent(agent_id):
 		return []
-	var preference: Array[String]
-	if bool(context.get("low_hp", false)):
-		preference = ["heal", "escape", "control", "cover", "damage", "entry", "info", "setup", "weapon", "ultimate"]
-	elif bool(context.get("in_combat", false)):
-		preference = ["damage", "control", "escape", "heal", "entry", "weapon", "info", "cover", "setup", "ultimate"]
-	elif String(context.get("side", "atk")) == "atk" and String(context.get("state", "")) == "execute":
-		preference = ["cover", "info", "entry", "control", "damage", "setup", "heal", "escape", "weapon", "ultimate"]
-	else:
-		preference = ["setup", "info", "cover", "control", "damage", "entry", "heal", "escape", "weapon", "ultimate"]
 	var result: Array[String] = []
-	result.assign(SLOT_KEYS)
-	result.sort_custom(func(a, b):
-		var intent_a := String(Catalog.ability(agent_id, a).get("intent", "entry"))
-		var intent_b := String(Catalog.ability(agent_id, b).get("intent", "entry"))
-		var priority_a := preference.find(intent_a)
-		var priority_b := preference.find(intent_b)
-		if priority_a == priority_b:
-			return SLOT_KEYS.find(a) < SLOT_KEYS.find(b)
-		return priority_a < priority_b
-	)
+	var in_combat := bool(context.get("in_combat", false))
+	var executing := bool(context.get("executing", false))
+	var enemy_channeling := bool(context.get("enemy_channeling", false))
+	var tactical_intent := String(context.get("tactical_intent", "hold"))
+	for key in BOT_SLOT_ORDER:
+		var intent := String(Catalog.ability(agent_id, key).get("intent", "entry"))
+		var should_use := false
+		match intent:
+			"heal":
+				should_use = bool(context.get("hurt", false)) and bool(context.get("safe_time", false))
+			"escape":
+				should_use = tactical_intent == "escape" and bool(context.get("hurt", false)) and in_combat
+			"cover":
+				should_use = tactical_intent in ["cover", "deny"]
+			"info":
+				should_use = tactical_intent == "info" or (executing and String(context.get("team_role", "")) == "info")
+			"setup":
+				should_use = not in_combat and (String(context.get("state", "")) in ["hold", "post"] or executing)
+			"weapon":
+				should_use = in_combat and not bool(context.get("has_primary", false))
+			"ultimate", "control", "damage", "entry":
+				should_use = in_combat or executing or enemy_channeling
+		if should_use:
+			result.append(key)
 	return result
 
 static func requires_equip(type: String) -> bool:
@@ -351,13 +370,20 @@ static func _perform(
 		"cloveRuse": world.spawn_smoke(target_point, 4.5, 13.5)
 		"orbital": world.orbital_strike(entity, _eye_position(entity), direction)
 		"tejoSalvo":
+			state["tejo_targets"] = []
 			Mechanics.select_tejo_target(entity, target_point)
 			Mechanics.select_tejo_target(entity, target_point + Vector3.RIGHT * 4.0)
 			for point in state.get("tejo_targets", []):
-				world.explode(entity, point, 4.0, 70.0, 35.0)
+				var salvo_point: Vector3 = point
+				Runtime.schedule_ability_event(world.ability_events, now + 1.2, func():
+					if world.can_fight():
+						world.explode(entity, salvo_point, 4.0, 70.0, 35.0), "guided-salvo")
 		"tejoArmageddon":
 			for index in range(1, 7):
-				world.orbital_strike(entity, position + Vector3.UP, forward)
+				var strike_point := position + forward * index * 5.0
+				Runtime.schedule_ability_event(world.ability_events, now + index * 0.45, func():
+					if world.can_fight():
+						world.orbital_strike_at(entity, strike_point), "armageddon")
 		"shadowStep": world.teleport_forward(entity, 9.0)
 		"shadowUlt": world.teleport_site(entity)
 		"razeBlastPack":
@@ -429,6 +455,7 @@ static func _perform(
 		"reynaDevour":
 			if not Mechanics.consume_reyna_soul(entity, "devour", now):
 				return false
+			_write_value(entity, "armor", minf(50.0, float(_read_value(entity, "armor", 0.0)) + 25.0))
 		"rez":
 			if not bool(world.try_revive(entity)):
 				return false
@@ -470,24 +497,55 @@ static func _perform(
 				return false
 			for enemy in enemies.slice(0, 3):
 				world.send_seeker(entity, enemy)
-		"sovaDrone", "cypherSpycam", "fadeProwler", "gekkoWingman", "gekkoDizzy", "gekkoThrash", "tejoDrone", "skyeTrailblazer", "yoruFakeout":
-			if type in ["sovaDrone", "cypherSpycam", "tejoDrone"]:
-				world.spawn_drone(entity, direction)
-			else:
-				world.spawn_boom_bot(entity, direction)
-		"harborStormSurge": world.spawn_slow_zone(entity, target_point, 4.0, 5.0)
+		"sovaDrone": world.spawn_controlled_scout(entity, "sova", 8.0, 7.0)
+		"cypherSpycam": world.spawn_controlled_scout(
+			entity, "camera", 12.0, 0.0, false, "", target_point + Vector3.UP * 1.8,
+		)
+		"fadeProwler": world.spawn_controlled_scout(entity, "prowler", 6.0, 8.0)
+		"gekkoWingman": world.spawn_controlled_scout(entity, "wingman", 7.0, 7.0, true, "wingman")
+		"gekkoDizzy": world.spawn_controlled_scout(entity, "dizzy", 5.0, 5.0, true, "dizzy")
+		"gekkoThrash": world.spawn_controlled_scout(entity, "thrash", 8.0, 9.0, true, "thrash")
+		"tejoDrone": world.spawn_controlled_scout(entity, "tejo", 8.0, 7.0)
+		"skyeTrailblazer": world.spawn_controlled_scout(entity, "trailblazer", 6.0, 8.0)
+		"yoruFakeout": world.spawn_controlled_scout(entity, "decoy", 10.0, 6.0, false)
+		"harborStormSurge":
+			Runtime.schedule_ability_event(world.ability_events, now + 0.9, func():
+				world.spawn_slow_zone(entity, target_point, 4.0, 5.0)
+				for enemy in _enemies(world, entity):
+					if _position(enemy).distance_to(target_point) < 4.0:
+						_write_value(enemy, "flash_until", maxf(
+							float(_read_value(enemy, "flash_until", 0.0)), now + 2.9,
+						)), "storm-surge")
 		"toxicDome": world.toxic_dome(entity, _eye_position(entity), direction)
 		"fadeSeize":
-			for enemy in _enemies(world, entity):
-				if _position(enemy).distance_to(target_point) <= 4.5:
-					_state(enemy)["tether"] = {"pos": target_point, "until": now + 5.0}
-					_write_value(enemy, "slow_until", now + 5.0)
-		"deadlockAnnihilation", "isoKillContract":
+			Runtime.schedule_ability_event(world.ability_events, now + 0.7, func():
+				for enemy in _enemies(world, entity):
+					if _position(enemy).distance_to(target_point) < 4.5:
+						_state(enemy)["tether"] = {"pos": target_point, "until": now + 5.7}
+						_write_value(enemy, "slow_until", now + 5.7)
+						_write_value(enemy, "hp", minf(75.0, float(_read_value(enemy, "hp", 100.0)))),
+				"fade-seize",
+			)
+		"deadlockAnnihilation":
 			var target: Variant = _nearest_enemy(world, entity, 24.0)
 			if target == null:
 				return false
-			_state(target)["tether"] = {"owner": entity, "until": now + 7.0}
+			_state(target)["cocoon"] = {"owner": entity, "until": now + 7.0}
+			_write_value(target, "slow_until", now + 7.0)
 			_write_value(target, "suppressed_until", now + 7.0)
+			Runtime.schedule_ability_event(world.ability_events, now + 7.0, func():
+				if (
+					bool(_read_value(target, "alive", false))
+					and _state(target).has("cocoon")
+				):
+					_apply_lethal_damage(target, entity), "annihilation")
+		"isoKillContract":
+			var target: Variant = _nearest_enemy(world, entity, INF)
+			if target == null:
+				return false
+			_state(entity)["duel"] = {"target": target, "until": now + 15.0}
+			_state(target)["duel"] = {"target": entity, "until": now + 15.0}
+			_write_value(target, "revealed_until", now + 15.0)
 		"isoUndercut":
 			for enemy in _enemies(world, entity):
 				var offset := _position(enemy) - position
@@ -644,6 +702,16 @@ static func _velocity(entity: Variant) -> Vector3:
 
 static func _set_velocity(entity: Variant, velocity: Vector3) -> void:
 	_write_value(entity, "velocity", velocity)
+
+static func _apply_lethal_damage(target: Variant, owner: Variant) -> void:
+	if target is Object:
+		if not is_instance_valid(target):
+			return
+		if target.has_method("take_damage"):
+			target.take_damage(999.0, owner, false)
+			return
+	_write_value(target, "hp", 0.0)
+	_write_value(target, "alive", false)
 
 static func _as_vector3(value: Variant) -> Vector3:
 	if value is Vector3:

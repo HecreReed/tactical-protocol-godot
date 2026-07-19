@@ -32,3 +32,10 @@ test('user-visible source no longer advertises the legacy roster or counts', () 
   assert.match(visible, /29 名特工/);
   assert.match(visible, /16 张地图/);
 });
+
+test('player input drives controlled scout mode', () => {
+  const player = read('scripts/player.gd');
+  assert.match(player, /main\.steer_controlled_unit\(self, dt\)/);
+  assert.match(player, /main\.activate_controlled_unit\(self\)/);
+  assert.match(player, /main\.end_controlled_unit\(self\)/);
+});

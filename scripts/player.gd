@@ -231,6 +231,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		pitch = clampf(pitch - event.relative.y * s, -1.55, 1.55)
 		rotation.y = yaw
 		cam.rotation.x = pitch
+	if main.is_controlling(self):
+		if event.is_action_pressed("fire"):
+			main.activate_controlled_unit(self)
+		elif event.is_action_pressed("ads"):
+			main.end_controlled_unit(self)
+		return
 	if event.is_action_pressed("ads"):
 		if cast_mode != "":
 			var alt_cast := prepared_cast
@@ -316,10 +322,6 @@ func _physics_process(dt: float) -> void:
 		_spectate(dt)
 		return
 	spectating = null
-	if cam.top_level:
-		cam.top_level = false
-		cam.position = Vector3(0, 1.55, 0)
-		cam.rotation = Vector3(pitch, 0, 0)
 	var now: float = main.now()
 	Mechanics.tick(self, now, dt)
 	if bool(ability_state.get("force_death", false)) or hp <= 0.0:
@@ -328,6 +330,14 @@ func _physics_process(dt: float) -> void:
 		take_damage(999.0, null, false)
 		if not alive:
 			return
+	if main.steer_controlled_unit(self, dt):
+		velocity.x = 0.0
+		velocity.z = 0.0
+		return
+	if cam.top_level:
+		cam.top_level = false
+		cam.position = Vector3(0, 1.55, 0)
+		cam.rotation = Vector3(pitch, 0, 0)
 	var cap := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
 	if cap and not _was_captured:
 		mouse_ignore_until = now + 0.15

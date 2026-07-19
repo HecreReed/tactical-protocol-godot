@@ -852,6 +852,10 @@ func orbital_strike(ent: Node, origin: Vector3, dir: Vector3) -> void:
 	var hit := space.intersect_ray(q)
 	var p: Vector3 = hit["position"] if not hit.is_empty() else origin + dir * 40.0
 	p.y = 0
+	orbital_strike_at(ent, p)
+
+func orbital_strike_at(ent: Node, point: Vector3) -> void:
+	var p := Vector3(point.x, 0.0, point.z)
 	var z := spawn_zone(ent, p, 5.5, 2.6, 0.0)
 	Runtime.schedule_ability_event(ability_events, now() + 2.6, func():
 		if can_fight():
@@ -1047,12 +1051,189 @@ func spawn_drone(ent: Node, dir: Vector3) -> void:
 	if ent == player:
 		Runtime.begin_control(control_state, ent, drone, now() + 3.6)
 
+func spawn_controlled_scout(
+	ent: Node,
+	scout_type: String,
+	duration: float,
+	speed: float,
+	controlled: bool = true,
+	globule_key: String = "",
+	start_point: Variant = null,
+) -> Dictionary:
+	var direction: Vector3 = ent.aim_dir().normalized()
+	if direction.is_zero_approx():
+		direction = Vector3.FORWARD
+	var spawn_position: Vector3 = ent.eye_pos() + direction * 0.9
+	if start_point is Vector3:
+		spawn_position = start_point
+
+	var node := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3(0.52, 0.3, 0.62)
+	if scout_type in ["dizzy", "camera"]:
+		mesh.size = Vector3(0.42, 0.42, 0.42)
+	elif scout_type in ["trailblazer", "prowler", "wingman", "decoy"]:
+		mesh.size = Vector3(0.5, 0.55, 0.8)
+	elif scout_type == "thrash":
+		mesh.size = Vector3(0.62, 0.45, 0.92)
+	var colors := {
+		"sova": Color(0.35, 0.75, 1.0), "camera": Color(0.65, 0.82, 0.9),
+		"trailblazer": Color(0.58, 0.9, 0.45), "prowler": Color(0.48, 0.32, 0.72),
+		"wingman": Color(0.92, 0.78, 0.24), "dizzy": Color(0.25, 0.75, 0.95),
+		"thrash": Color(0.65, 0.34, 0.88), "tejo": Color(0.95, 0.52, 0.25),
+		"decoy": Color(0.3, 0.72, 1.0),
+	}
+	var color: Color = colors.get(scout_type, Color(0.4, 0.85, 0.8))
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color.darkened(0.35)
+	material.emission_enabled = true
+	material.emission = color
+	material.emission_energy_multiplier = 1.3
+	mesh.material = material
+	node.mesh = mesh
+	add_child(node)
+	node.global_position = spawn_position
+
+	var scout := {
+		"kind": "controlled_scout",
+		"scout_type": scout_type,
+		"pos": spawn_position,
+		"owner": ent,
+		"team": ent.team,
+		"node": node,
+		"until": now() + duration,
+		"arm_at": 0.0,
+		"hp": 40.0,
+		"next_fire": 0.0,
+		"next_ping": now() + 0.5,
+		"next_action": 0.0,
+		"vel": direction * speed,
+		"active": true,
+		"globule_key": globule_key,
+	}
+	devices.append(scout)
+	if controlled and ent == player:
+		Runtime.begin_control(control_state, ent, scout, scout["until"])
+	return scout
+
+func is_controlling(owner: Node) -> bool:
+	var mode = control_state.get("control_mode")
+	return (
+		mode is Dictionary
+		and mode.get("owner") == owner
+		and mode.get("unit") is Dictionary
+		and bool(mode["unit"].get("active", true))
+		and now() < float(mode.get("until", 0.0))
+	)
+
+func steer_controlled_unit(owner: Node, dt: float) -> bool:
+	var mode = control_state.get("control_mode")
+	if not mode is Dictionary or mode.get("owner") != owner:
+		return false
+	var unit = mode.get("unit")
+	if not unit is Dictionary or devices.find(unit) < 0:
+		if unit is Dictionary:
+			unit["active"] = false
+		Runtime.end_control(control_state)
+		return false
+	var forward_axis := 0.0
+	if Input.is_action_pressed("move_forward"):
+		forward_axis += 1.0
+	if Input.is_action_pressed("move_back"):
+		forward_axis -= 1.0
+	if not Runtime.steer_controlled_unit(
+		control_state, owner, now(), dt, owner.aim_dir(), forward_axis,
+	):
+		return false
+	if owner == player and "cam" in owner:
+		owner.cam.top_level = true
+		owner.cam.global_position = unit["pos"]
+		owner.cam.global_rotation = Vector3(owner.pitch, owner.yaw, 0.0)
+		if "vm_group" in owner and is_instance_valid(owner.vm_group):
+			owner.vm_group.visible = false
+	return true
+
+func end_controlled_unit(owner: Node) -> void:
+	var mode = control_state.get("control_mode")
+	if not mode is Dictionary or mode.get("owner") != owner:
+		return
+	var unit = mode.get("unit")
+	if unit is Dictionary:
+		unit["until"] = now()
+	Runtime.end_control(control_state)
+
+func activate_controlled_unit(owner: Node) -> bool:
+	var mode = control_state.get("control_mode")
+	if not mode is Dictionary or mode.get("owner") != owner:
+		return false
+	var unit = mode.get("unit")
+	if not unit is Dictionary or now() < float(unit.get("next_action", 0.0)):
+		return false
+	unit["next_action"] = now() + 1.0
+	var victim: Node = null
+	var best_distance := 5.0
+	for enemy in combatants():
+		if not enemy.alive or enemy.team == owner.team:
+			continue
+		var distance: float = enemy.global_position.distance_to(unit["pos"])
+		if distance < best_distance:
+			best_distance = distance
+			victim = enemy
+	var impact := Runtime.controlled_impact(String(unit["scout_type"]))
+	if victim == null or impact.has("reveal_radius"):
+		reveal_area(unit["pos"], float(impact.get("reveal_radius", 10.0)), owner)
+		return true
+	if impact.has("daze_until"):
+		victim.daze_until = maxf(victim.daze_until, now() + float(impact["daze_until"]))
+		if victim == player:
+			hud.dazed(float(impact["daze_until"]))
+	if impact.has("slow_until"):
+		victim.slow_until = maxf(victim.slow_until, now() + float(impact["slow_until"]))
+	if impact.has("suppressed_until"):
+		victim.suppressed_until = maxf(victim.suppressed_until, now() + float(impact["suppressed_until"]))
+	if impact.has("flash_until"):
+		victim.flash_until = maxf(victim.flash_until, now() + float(impact["flash_until"]))
+		if victim == player:
+			hud.flashed(float(impact["flash_until"]))
+	if impact.has("terror_trail_until"):
+		victim.ability_state["terror_trail_until"] = now() + float(impact["terror_trail_until"])
+	if bool(impact.get("ends_unit", false)):
+		unit["until"] = now()
+	return true
+
+func _finish_controlled_scout(scout: Dictionary) -> void:
+	if not bool(scout.get("active", true)):
+		return
+	scout["active"] = false
+	var owner = scout.get("owner")
+	var globule_key := String(scout.get("globule_key", ""))
+	if (
+		not globule_key.is_empty()
+		and is_instance_valid(owner)
+		and "resources" in owner
+	):
+		var globules: Dictionary = owner.resources.get("globules", {})
+		globules[globule_key] = {"until": now() + 20.0}
+		owner.resources["globules"] = globules
+	var mode = control_state.get("control_mode")
+	if mode is Dictionary and mode.get("unit") == scout:
+		Runtime.end_control(control_state)
+
 func _tick_devices(dt: float) -> void:
 	for i in range(devices.size() - 1, -1, -1):
 		var d: Dictionary = devices[i]
-		if now() > d["until"] or d["hp"] <= 0:
+		var owner_dead: bool = (
+			d["kind"] == "controlled_scout"
+			and (
+				not is_instance_valid(d.get("owner"))
+				or not bool(d["owner"].alive)
+			)
+		)
+		if now() > d["until"] or d["hp"] <= 0 or owner_dead:
 			if d["kind"] == "boombot":
 				explode(d["owner"], d["pos"], 3.4, 70.0, 30.0)
+			elif d["kind"] == "controlled_scout":
+				_finish_controlled_scout(d)
 			if is_instance_valid(d["node"]):
 				d["node"].queue_free()
 			if control_state.get("control_mode") is Dictionary and control_state["control_mode"].get("unit") == d:
@@ -1060,6 +1241,23 @@ func _tick_devices(dt: float) -> void:
 			devices.remove_at(i)
 			continue
 		match d["kind"]:
+			"controlled_scout":
+				var step: Vector3 = d["vel"] * dt
+				if not step.is_zero_approx():
+					var space := get_world_3d().direct_space_state
+					var query := PhysicsRayQueryParameters3D.create(d["pos"], d["pos"] + step)
+					query.collision_mask = 1
+					if is_instance_valid(d.get("owner")):
+						query.exclude = [d["owner"].get_rid()]
+					if space.intersect_ray(query).is_empty():
+						d["pos"] += step
+					else:
+						d["vel"] *= -0.25
+				if is_instance_valid(d["node"]):
+					d["node"].global_position = d["pos"]
+				if now() >= float(d["next_ping"]):
+					d["next_ping"] = now() + 0.8
+					reveal_area(d["pos"], 7.0, d["owner"])
 			"drone", "boombot":
 				d["pos"] += d["vel"] * dt
 				if is_instance_valid(d["node"]):

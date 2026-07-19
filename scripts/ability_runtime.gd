@@ -126,6 +126,48 @@ static func end_control(state: Dictionary) -> Variant:
 	state["control_mode"] = null
 	return owner
 
+static func steer_controlled_unit(
+	state: Dictionary,
+	owner: Variant,
+	now: float,
+	delta: float,
+	forward: Vector3,
+	forward_axis: float,
+) -> bool:
+	var mode = state.get("control_mode")
+	if not mode is Dictionary or mode.get("owner") != owner:
+		return false
+	var unit = mode.get("unit")
+	if (
+		not bool(_read_value(owner, "alive", true))
+		or now >= float(mode.get("until", INF))
+		or not unit is Dictionary
+		or not bool(unit.get("active", true))
+	):
+		end_control(state)
+		return false
+	var direction := forward.normalized()
+	if direction.is_zero_approx():
+		direction = Vector3.FORWARD
+	var speed := 3.0
+	if forward_axis > 0.0:
+		speed = 8.0
+	elif forward_axis < 0.0:
+		speed = -5.0
+	var current_velocity := _as_vector3(unit.get("vel", Vector3.ZERO))
+	unit["vel"] = current_velocity.lerp(direction * speed, minf(1.0, delta * 5.0))
+	return true
+
+static func controlled_impact(scout_type: String) -> Dictionary:
+	match scout_type:
+		"trailblazer":
+			return {"daze_until": 3.0, "slow_until": 3.0, "ends_unit": true}
+		"thrash":
+			return {"suppressed_until": 6.0, "slow_until": 6.0, "ends_unit": true}
+		"prowler":
+			return {"flash_until": 2.5, "terror_trail_until": 6.0, "ends_unit": true}
+	return {"reveal_radius": 10.0, "reveal_duration": 3.0, "ends_unit": false}
+
 static func clear_round_state(queue: Array, utility_store: Dictionary, control_state: Dictionary) -> void:
 	queue.clear()
 	var items: Array = utility_store.get("items", [])
@@ -164,5 +206,13 @@ static func _as_vector3(value: Variant) -> Vector3:
 			float(value.get("x", 0.0)),
 			float(value.get("y", 0.0)),
 			float(value.get("z", 0.0)),
-		)
+			)
 	return Vector3.ZERO
+
+static func _read_value(entity: Variant, key: String, fallback: Variant = null) -> Variant:
+	if entity is Dictionary:
+		return entity.get(key, fallback)
+	if entity == null:
+		return fallback
+	var value = entity.get(key)
+	return fallback if value == null else value

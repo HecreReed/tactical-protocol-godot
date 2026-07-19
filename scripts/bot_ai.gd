@@ -272,15 +272,81 @@ func _util_abilities(now: float) -> void:
 	elif side == "def" and state == "post" and nav_finished():
 		_try_intent_ability(now, false)
 
+func _visible_enemy_channeling() -> CharacterBody3D:
+	for enemy in main.combatants():
+		if enemy == self or enemy.team == team or not enemy.alive or String(enemy.channel).is_empty():
+			continue
+		var progress: float = main.match_mgr.spike_prog if enemy.channel == "plant" else main.match_mgr.defuse_prog
+		if progress <= 0.8:
+			continue
+		var seen: bool = main.has_los(eye_pos(), enemy.eye_pos(), [self, enemy])
+		var close := global_position.distance_to(enemy.global_position) < 20.0
+		if seen or close:
+			return enemy
+	return null
+
+func _nearby_cover_distance() -> float:
+	var best := 99.0
+	var origin := global_position + Vector3.UP * 0.9
+	var space := get_world_3d().direct_space_state
+	for direction in [
+		Vector3.FORWARD, Vector3.BACK, Vector3.LEFT, Vector3.RIGHT,
+		(Vector3.FORWARD + Vector3.LEFT).normalized(),
+		(Vector3.FORWARD + Vector3.RIGHT).normalized(),
+		(Vector3.BACK + Vector3.LEFT).normalized(),
+		(Vector3.BACK + Vector3.RIGHT).normalized(),
+	]:
+		var query := PhysicsRayQueryParameters3D.create(origin, origin + direction * 8.0)
+		query.collision_mask = 1
+		query.exclude = [get_rid()]
+		var hit := space.intersect_ray(query)
+		if not hit.is_empty():
+			best = minf(best, origin.distance_to(hit["position"]))
+	return best
+
 func _try_intent_ability(now: float, in_combat: bool) -> bool:
 	if now < next_ability_at or now < suppressed_until:
 		return false
+	var side: String = main.match_mgr.side_of(self)
+	var executing := state == "execute"
+	var enemy_channeling := _visible_enemy_channeling()
+	var hurt := hp < 50.0
+	var safe_time := now - last_hurt_at > 4.0
+	var contact_confidence := 1.0 if target != null else (0.5 if state == "hunt" and now < hunt_until else 0.0)
+	var dangerous_sightline: bool = (
+		executing
+		and goal != Vector3.ZERO
+		and not main.has_los(eye_pos(), goal + Vector3.UP * 1.4, [self])
+	)
+	var tactical_intent := Ab.bot_utility_intent({
+		"enemy_channeling": enemy_channeling != null,
+		"hurt": hurt,
+		"safe_escape": _nearby_cover_distance() < 3.0,
+		"retaking": side == "def" and main.match_mgr.spike_state == "planted",
+		"contact_confidence": contact_confidence,
+		"executing": executing,
+		"dangerous_sightline": dangerous_sightline,
+	})
 	var context := {
-		"side": main.match_mgr.side_of(self),
+		"side": side,
 		"state": state,
 		"in_combat": in_combat,
-		"low_hp": hp < 45.0,
+		"hurt": hurt,
+		"safe_time": safe_time,
+		"safe_escape": _nearby_cover_distance() < 3.0,
+		"executing": executing,
+		"enemy_channeling": enemy_channeling != null,
+		"tactical_intent": tactical_intent,
+		"team_role": "info" if assault_role == "scout" else assault_role,
+		"has_primary": String(weapon["def"]["cat"]) not in ["pistol", "melee"],
 	}
+	var aim_point: Vector3 = target.global_position if target != null else (
+		enemy_channeling.global_position if enemy_channeling != null else (
+			goal if executing else main.match_mgr.spike_pos
+		)
+	)
+	if aim_point != global_position:
+		yaw = atan2(-(aim_point.x - global_position.x), -(aim_point.z - global_position.z))
 	for key in Ab.bot_ability_order(agent_id, context):
 		if key == "x" and ult_points < Ab.AGENTS[agent_id]["ult_cost"]:
 			continue
