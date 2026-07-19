@@ -359,7 +359,13 @@ static func _perform(
 		"stunWave": world.cone_daze(entity, 18.0, 0.72, 2.4)
 		"bigStun", "waylayConvergent": world.cone_daze(entity, 26.0, 0.55, 3.2)
 		"miksBassquake": world.cone_daze(entity, 28.0, 0.55, 2.5)
-		"harborReckoning": world.cone_daze(entity, 32.0, 0.65, 3.0)
+		"harborReckoning":
+			world.cone_daze(entity, 32.0, 0.65, 3.0)
+			for enemy in _enemies(world, entity):
+				if _position(enemy).distance_to(position) < 32.0:
+					_write_value(enemy, "flash_until", maxf(
+						float(_read_value(enemy, "flash_until", 0.0)), now + 2.0,
+					))
 		"stimBeacon": world.spawn_device(entity, "beacon", position + forward * 1.2)
 		"alarmBot", "deadlockSensor", "chamberTrademark": world.spawn_device(entity, "alarm", target_point)
 		"turret": world.spawn_device(entity, "turret", position + forward * 1.4)
@@ -489,8 +495,11 @@ static func _perform(
 		"cypherNeuralTheft": world.reveal_enemies(entity)
 		"fadeHaunt": world.reveal_area(target_point, 16.0, entity)
 		"fadeNightfall":
-			world.reveal_enemies(entity)
+			world.reveal_area(position, 30.0, entity, 4.0)
 			world.cone_daze(entity, 30.0, 0.45, 4.0)
+			for enemy in _enemies(world, entity):
+				if _position(enemy).distance_to(position) < 30.0:
+					_write_value(enemy, "hp", minf(75.0, float(_read_value(enemy, "hp", 100.0))))
 		"skyeSeekers":
 			var enemies := _enemies(world, entity)
 			if enemies.is_empty():
@@ -499,7 +508,7 @@ static func _perform(
 				world.send_seeker(entity, enemy)
 		"sovaDrone": world.spawn_controlled_scout(entity, "sova", 8.0, 7.0)
 		"cypherSpycam": world.spawn_controlled_scout(
-			entity, "camera", 12.0, 0.0, false, "", target_point + Vector3.UP * 1.8,
+			entity, "camera", 12.0, 0.0, true, "", target_point + Vector3.UP * 1.8,
 		)
 		"fadeProwler": world.spawn_controlled_scout(entity, "prowler", 6.0, 8.0)
 		"gekkoWingman": world.spawn_controlled_scout(entity, "wingman", 7.0, 7.0, true, "wingman")
@@ -507,7 +516,7 @@ static func _perform(
 		"gekkoThrash": world.spawn_controlled_scout(entity, "thrash", 8.0, 9.0, true, "thrash")
 		"tejoDrone": world.spawn_controlled_scout(entity, "tejo", 8.0, 7.0)
 		"skyeTrailblazer": world.spawn_controlled_scout(entity, "trailblazer", 6.0, 8.0)
-		"yoruFakeout": world.spawn_controlled_scout(entity, "decoy", 10.0, 6.0, false)
+		"yoruFakeout": world.spawn_controlled_scout(entity, "decoy", 10.0, 6.0)
 		"harborStormSurge":
 			Runtime.schedule_ability_event(world.ability_events, now + 0.9, func():
 				world.spawn_slow_zone(entity, target_point, 4.0, 5.0)

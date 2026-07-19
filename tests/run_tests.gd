@@ -13,6 +13,7 @@ class FakeScoutOwner:
 	var resources := {"globules": {}}
 	var pitch := 0.0
 	var yaw := 0.0
+	var revealed_until := 0.0
 
 	func eye_pos() -> Vector3:
 		return global_position + Vector3.UP * 1.55
@@ -29,6 +30,8 @@ class FakeAbilityWorld:
 	var scouts: Array = []
 	var fighters: Array = []
 	var slow_zones: Array = []
+	var cone_dazes: Array = []
+	var reveals: Array = []
 	var legacy_units: Array[String] = []
 
 	func can_fight() -> bool:
@@ -54,6 +57,19 @@ class FakeAbilityWorld:
 
 	func spawn_slow_zone(owner: Variant, point: Vector3, radius: float, duration: float) -> void:
 		slow_zones.append({
+			"owner": owner, "point": point, "radius": radius, "duration": duration,
+		})
+
+	func cone_daze(owner: Variant, radius: float, dot: float, duration: float) -> void:
+		cone_dazes.append({
+			"owner": owner, "radius": radius, "dot": dot, "duration": duration,
+		})
+
+	func reveal_enemies(owner: Variant) -> void:
+		reveals.append({"owner": owner, "radius": INF, "duration": 5.0})
+
+	func reveal_area(point: Vector3, radius: float, owner: Variant, duration: float = 4.0) -> void:
+		reveals.append({
 			"owner": owner, "point": point, "radius": radius, "duration": duration,
 		})
 
@@ -265,6 +281,17 @@ func _test_utility_runtime() -> void:
 		is_equal_approx(scout_owner.resources["globules"]["wingman"]["until"], 22.01),
 		"expired Gekko scout creates a twenty second reclaim window",
 	)
+	var scan_target := FakeScoutOwner.new()
+	scan_target.team = "enemy"
+	scout_world.add_child(scan_target)
+	scout_world.bots.append(scan_target)
+	scout_world._t = 3.0
+	var scan_scout: Dictionary = scout_world.spawn_controlled_scout(
+		scout_owner, "sova", 8.0, 7.0,
+	)
+	scan_target.global_position = scan_scout["pos"]
+	assert_true(scout_world.activate_controlled_unit(scout_owner), "controlled scanner activates")
+	assert_eq(scan_target.revealed_until, 6.0, "controlled scanner reveals for upstream three seconds")
 	scout_world.free()
 
 	var point := Vector3(5, 0, 4)
@@ -574,11 +601,11 @@ func _test_cast_contracts() -> void:
 	assert_eq(scout_world.scouts.size(), 9, "all nine scout abilities keep distinct units")
 	if scout_world.scouts.size() == 9:
 		var expected_scouts := [
-			["sova", 8.0, 7.0, true, ""], ["camera", 12.0, 0.0, false, ""],
+			["sova", 8.0, 7.0, true, ""], ["camera", 12.0, 0.0, true, ""],
 			["prowler", 6.0, 8.0, true, ""], ["wingman", 7.0, 7.0, true, "wingman"],
 			["dizzy", 5.0, 5.0, true, "dizzy"], ["thrash", 8.0, 9.0, true, "thrash"],
 			["tejo", 8.0, 7.0, true, ""], ["trailblazer", 6.0, 8.0, true, ""],
-			["decoy", 10.0, 6.0, false, ""],
+			["decoy", 10.0, 6.0, true, ""],
 		]
 		for index in expected_scouts.size():
 			var actual: Dictionary = scout_world.scouts[index]
@@ -670,6 +697,36 @@ func _test_cast_contracts() -> void:
 		assert_eq(duelist["ability_state"]["duel"]["target"], iso, "enemy duel points to Iso")
 		assert_eq(iso["ability_state"]["duel"]["until"], 55.0, "Iso duel lasts fifteen seconds")
 	assert_eq(duelist["revealed_until"], 55.0, "Kill Contract reveals the enemy for the duel")
+
+	var nightfall_fade := _cast_actor("fade")
+	nightfall_fade["ult_points"] = int(Catalog.agent("fade")["ultCost"])
+	var nightfall_target := _actor("sage")
+	nightfall_target["team"] = "enemy"
+	nightfall_target["pos"] = Vector3(1, 0, -18)
+	var nightfall_world := FakeAbilityWorld.new()
+	nightfall_world.clock = 60.0
+	nightfall_world.fighters = [nightfall_fade, nightfall_target]
+	var nightfall := Abilities.start_cast(nightfall_fade, "x", nightfall_world.clock, true)
+	assert_true(Abilities.confirm_cast(nightfall_world, nightfall_fade, nightfall), "Fade Nightfall casts")
+	assert_eq(nightfall_target["hp"], 75.0, "Fade Nightfall caps nearby enemy health at 75")
+	assert_eq(nightfall_world.reveals.size(), 1, "Fade Nightfall creates one reveal area")
+	if nightfall_world.reveals.size() == 1:
+		assert_eq(nightfall_world.reveals[0]["radius"], 30.0, "Fade Nightfall reveal radius")
+		assert_eq(nightfall_world.reveals[0]["duration"], 4.0, "Fade Nightfall reveal duration")
+
+	var reckoning_harbor := _cast_actor("harbor")
+	reckoning_harbor["ult_points"] = int(Catalog.agent("harbor")["ultCost"])
+	var reckoning_target := _actor("sage")
+	reckoning_target["team"] = "enemy"
+	reckoning_target["pos"] = Vector3(1, 0, -20)
+	reckoning_target["flash_until"] = 0.0
+	var reckoning_world := FakeAbilityWorld.new()
+	reckoning_world.clock = 70.0
+	reckoning_world.fighters = [reckoning_harbor, reckoning_target]
+	var reckoning := Abilities.start_cast(reckoning_harbor, "x", reckoning_world.clock, true)
+	assert_true(Abilities.confirm_cast(reckoning_world, reckoning_harbor, reckoning), "Harbor Reckoning casts")
+	assert_eq(reckoning_world.cone_dazes.size(), 1, "Harbor Reckoning emits its daze cone")
+	assert_eq(reckoning_target["flash_until"], 72.0, "Harbor Reckoning flashes nearby enemies")
 
 func _test_combat_and_round_integration() -> void:
 	var iso := _actor("iso")

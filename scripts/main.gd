@@ -892,10 +892,10 @@ func reveal_enemies(ent: Node) -> void:
 		if e.alive and e.team != ent.team:
 			e.revealed_until = now() + 5.0
 
-func reveal_area(pos: Vector3, r: float, owner: Node) -> void:
+func reveal_area(pos: Vector3, r: float, owner: Node, duration: float = 4.0) -> void:
 	for e in combatants():
 		if e.alive and e.team != owner.team and e.global_position.distance_to(pos) < r:
-			e.revealed_until = now() + 4.0
+			e.revealed_until = now() + duration
 
 func try_revive(ent: Node) -> bool:
 	for e in combatants():
@@ -1194,7 +1194,10 @@ func activate_controlled_unit(owner: Node) -> bool:
 			victim = enemy
 	var impact := Runtime.controlled_impact(String(unit["scout_type"]))
 	if victim == null or impact.has("reveal_radius"):
-		reveal_area(unit["pos"], float(impact.get("reveal_radius", 10.0)), owner)
+		reveal_area(
+			unit["pos"], float(impact.get("reveal_radius", 10.0)), owner,
+			float(impact.get("reveal_duration", 3.0)),
+		)
 		return true
 	if impact.has("daze_until"):
 		victim.daze_until = maxf(victim.daze_until, now() + float(impact["daze_until"]))
